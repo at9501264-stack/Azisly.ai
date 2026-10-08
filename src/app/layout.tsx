@@ -31,8 +31,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} dark`}>
-      <body className="min-h-screen bg-[#0c0c0e] text-zinc-100 flex flex-col antialiased selection:bg-zinc-800 selection:text-white">
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} dark`} suppressHydrationWarning>
+      <body
+        className="min-h-screen bg-[#0c0c0e] text-zinc-100 flex flex-col antialiased selection:bg-zinc-800 selection:text-white"
+        suppressHydrationWarning
+      >
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
