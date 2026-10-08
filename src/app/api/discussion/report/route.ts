@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 import {
   TranscriptTurn,
   LanguagePreference,
@@ -20,6 +19,7 @@ import {
   buildReportSystemInstruction,
   buildReportUserPrompt
 } from '@/lib/reportPromptBuilder';
+import { generateLlmCompletion, getLlmProviderStatus } from '@/lib/llmClient';
 
 // Rate limiter for report generation
 interface RateLimitRecord {
@@ -346,10 +346,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 5. Check server-side Gemini API credentials
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) {
-      // Deterministic fallback report when GEMINI_API_KEY is not set
+    // 5. Check server-side LLM credentials (Groq primary, Gemini fallback)
+    const { isConfigured } = getLlmProviderStatus();
+    if (!isConfigured) {
+      // Deterministic fallback report when neither GROQ_API_KEY nor GEMINI_API_KEY is set
       const deterministicReport = createDeterministicStudentReport(
         topic,
         validTranscript,
@@ -364,13 +364,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const model =
-      process.env.REPORT_MODEL?.trim() ||
-      process.env.GEMINI_MODEL?.trim() ||
-      'gemini-2.5-flash';
-
-    const ai = new GoogleGenAI({ apiKey });
-
     // 6. Build Prompts
     const promptParams = {
       topic: topic.trim(),
@@ -383,26 +376,19 @@ export async function POST(req: NextRequest) {
     const systemInstruction = buildReportSystemInstruction(language as LanguagePreference);
     const userPrompt = buildReportUserPrompt(promptParams);
 
-    // 7. Call Gemini Model
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Report generation timed out after 35 seconds')), 35000)
-    );
-
+    // 7. Call LLM (Groq primary, Gemini fallback)
     const callModel = async (prompt: string) => {
-      return await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          maxOutputTokens: 2500,
-          temperature: 0.2 // Low temperature for high adherence to transcript quotes
-        }
+      return await generateLlmCompletion({
+        systemInstruction,
+        userPrompt: prompt,
+        temperature: 0.2, // Low temperature for high adherence to transcript quotes
+        maxTokens: 2500,
+        timeoutMs: 35000
       });
     };
 
-    const response = await Promise.race([callModel(userPrompt), timeoutPromise]);
-    const responseText = response.text?.trim() || '';
+    const llmResult = await callModel(userPrompt);
+    const responseText = llmResult.text.trim();
 
     // 8. Parse LLM response
     interface LLMReportOutput {
@@ -443,8 +429,8 @@ MANDATORY RULES FOR REPAIR:
 3. Adhere strictly to the requested JSON schema.`;
 
       try {
-        const repairResponse = await Promise.race([callModel(repairPrompt), timeoutPromise]);
-        const repairText = repairResponse.text?.trim() || '';
+        const repairResponse = await callModel(repairPrompt);
+        const repairText = repairResponse.text.trim();
         const repairedParsed: LLMReportOutput = JSON.parse(
           repairText.replace(/```json|```/g, '').trim()
         );
@@ -518,7 +504,7 @@ MANDATORY RULES FOR REPAIR:
       dimensions: finalDimensions,
       alternativeOpportunity: safeAlternative,
       disclaimer: DISCLAIMER_TEXT,
-      modelUsed: model
+      modelUsed: llmResult.model
     };
 
     return NextResponse.json({
@@ -545,7 +531,7 @@ MANDATORY RULES FOR REPAIR:
       {
         success: false,
         error: isQuotaOrRateLimit
-          ? 'Gemini API rate limit or quota exceeded while generating report. Please retry in a few moments.'
+          ? 'LLM API rate limit or quota exceeded while generating report. Please retry in a few moments.'
           : 'Failed to generate discussion report: ' + errorMessage.slice(0, 150),
         retryable: true
       },

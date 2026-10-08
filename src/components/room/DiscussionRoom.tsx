@@ -109,7 +109,7 @@ export function DiscussionRoom() {
                 {state.engineMode === 'ai' ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-300 border border-zinc-800 text-[11px] font-medium tracking-wide">
                     <Zap className="w-3 h-3 text-zinc-400" />
-                    <span>AI Live (Gemini)</span>
+                    <span>AI Live (Groq + Gemini)</span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800 text-[11px] font-medium tracking-wide">

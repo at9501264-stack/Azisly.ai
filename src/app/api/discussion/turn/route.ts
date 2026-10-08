@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
 import {
   Participant,
   TranscriptTurn,
@@ -10,6 +9,7 @@ import {
   buildSystemInstruction,
   buildUserPrompt
 } from '@/lib/geminiPromptBuilder';
+import { generateLlmCompletion, getLlmProviderStatus } from '@/lib/llmClient';
 
 // Simple in-memory sliding window rate limiter
 interface RateLimitRecord {
@@ -123,26 +123,22 @@ export async function POST(req: NextRequest) {
     const validRemainingSecs = typeof remainingSeconds === 'number' ? Math.max(0, remainingSeconds) : 0;
     const validTranscript = Array.isArray(transcript) ? transcript : [];
 
-    // 3. Check server-side Gemini API key
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) {
+    // 3. Check server-side LLM credentials (Groq primary, Gemini fallback)
+    const { isConfigured } = getLlmProviderStatus();
+    if (!isConfigured) {
       return NextResponse.json(
         {
           success: false,
           isConfigured: false,
           error:
-            'GEMINI_API_KEY is not configured on the server. Please add GEMINI_API_KEY to your .env.local file to enable live AI discussion.',
+            'Neither GROQ_API_KEY nor GEMINI_API_KEY is configured on the server. Please add GROQ_API_KEY or GEMINI_API_KEY to your .env.local file to enable live AI discussion.',
           retryable: false
         },
         { status: 200 }
       );
     }
 
-    // 4. Initialize official GoogleGenAI SDK
-    const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
-    const ai = new GoogleGenAI({ apiKey });
-
-    // 5. Build prompt with XML isolation and persona constraints
+    // 4. Build prompt with XML isolation and persona constraints
     const promptParams = {
       topic: topic.trim(),
       language: validLang,
@@ -157,40 +153,28 @@ export async function POST(req: NextRequest) {
     const systemInstruction = buildSystemInstruction(promptParams);
     const userPrompt = buildUserPrompt(promptParams);
 
-    // 6. Generate content with structured JSON schema
-    const response = await ai.models.generateContent({
-      model,
-      contents: userPrompt,
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            text: { type: 'STRING' },
-            addressedParticipantId: { type: 'STRING', nullable: true },
-            stanceUpdate: { type: 'STRING' }
-          },
-          required: ['text']
-        },
-        maxOutputTokens: 250,
-        temperature: 0.7
-      }
+    // 5. Generate content: Groq primary (ultra-low latency), Gemini fallback
+    const llmResult = await generateLlmCompletion({
+      systemInstruction,
+      userPrompt,
+      temperature: 0.7,
+      maxTokens: 300,
+      timeoutMs: 15000
     });
 
-    const responseText = response.text?.trim();
+    const responseText = llmResult.text.trim();
     if (!responseText) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Gemini returned an empty response. You can retry or switch to demo mode.',
+          error: 'LLM returned an empty response. You can retry or switch to demo mode.',
           retryable: true
         },
         { status: 502 }
       );
     }
 
-    // 7. Parse and validate JSON structure
+    // 6. Parse and validate JSON structure
     interface ParsedOutput {
       text: string;
       addressedParticipantId?: string | null;
@@ -234,7 +218,8 @@ export async function POST(req: NextRequest) {
       addressedParticipantId: safeAddressedId,
       stanceUpdate: parsed.stanceUpdate?.trim() || undefined,
       source: 'model',
-      model
+      provider: llmResult.provider,
+      model: llmResult.model
     });
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -249,7 +234,7 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error: isQuotaOrRateLimit
-          ? 'Gemini API rate limit or quota exceeded. You can retry in a moment or switch to demo mode.'
+          ? 'LLM API rate limit or quota exceeded. You can retry in a moment or switch to demo mode.'
           : 'Failed to generate discussion turn: ' + errorMessage.slice(0, 150),
         retryable: true
       },

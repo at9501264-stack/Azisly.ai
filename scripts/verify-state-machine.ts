@@ -260,26 +260,28 @@ async function runAcceptanceChecks() {
   }
   console.log('✓ Sentence-level delivered text calculation verified');
 
-  // Check 12: Live API Notices (Conditional)
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (apiKey && apiKey.length > 5) {
-    console.log('[Check 12] GEMINI_API_KEY detected in environment. Running bounded live API check...');
+  // Check 12: Live LLM Verification (Groq primary, Gemini fallback)
+  const groqKey = process.env.GROQ_API_KEY?.trim();
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  if ((groqKey && groqKey.length > 5) || (geminiKey && geminiKey.length > 5)) {
+    console.log('[Check 12] Live LLM credentials detected in environment. Running bounded verification...');
     try {
-      const { GoogleGenAI } = await import('@google/genai');
-      const ai = new GoogleGenAI({ apiKey });
-      const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
-      const liveResponse = await ai.models.generateContent({
-        model,
-        contents: 'Say "GD Arena Phase 3 Verified" in 5 words.',
-        config: { maxOutputTokens: 20 }
+      const { generateLlmCompletion, getLlmProviderStatus } = await import('../src/lib/llmClient');
+      const status = getLlmProviderStatus();
+      console.log(`  -> Provider config: Primary=${status.primaryProvider}, Fallback=${status.fallbackProvider}`);
+      const liveResponse = await generateLlmCompletion({
+        systemInstruction: 'Respond in JSON with a message field.',
+        userPrompt: 'Say "GD Arena Verified" in 5 words.',
+        maxTokens: 200,
+        timeoutMs: 15000
       });
-      console.log(`✓ Live Gemini API test passed using model "${model}": "${liveResponse.text?.trim()}"`);
+      console.log(`✓ Live LLM call succeeded via ${liveResponse.provider} (${liveResponse.model}): "${liveResponse.text.trim()}"`);
     } catch (apiErr: unknown) {
       const msg = apiErr instanceof Error ? apiErr.message : String(apiErr);
-      console.warn(`⚠ Live Gemini API call failed: ${msg}`);
+      console.warn(`⚠ Live LLM call failed: ${msg}`);
     }
   } else {
-    console.log('[Check 12] Live LLM Notice: GEMINI_API_KEY is not configured in process.env.');
+    console.log('[Check 12] Live LLM Notice: Neither GROQ_API_KEY nor GEMINI_API_KEY is configured in process.env.');
     console.log('  -> Live API generation remains unverified until a key is added to .env.local.');
     console.log('  -> Deterministic demo fallback is active and fully functional.');
   }

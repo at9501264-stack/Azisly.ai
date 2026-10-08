@@ -471,7 +471,7 @@ export function RoomSetup() {
                   Discussion Generation Engine
                 </label>
                 <span className="text-[10px] text-zinc-500 font-mono">
-                  {state.isAiConfigured ? 'GEMINI_API_KEY Active' : 'Offline Fallback'}
+                  {state.isAiConfigured ? 'Groq + Gemini Active' : 'Offline Fallback'}
                 </span>
               </div>
 
@@ -487,14 +487,14 @@ export function RoomSetup() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-zinc-300" /> Gemini Live AI
+                      <Sparkles className="w-3.5 h-3.5 text-zinc-300" /> Live Cloud AI
                     </span>
                     {enginePreference === 'ai' && (
                       <span className="text-[10px] text-zinc-200 font-medium px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700">Active</span>
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-400">
-                    Real LLM generation via Google Gemini API (gemini-2.5-flash).
+                    Groq ultra-fast response with Google Gemini fallback.
                   </p>
                 </button>
 
@@ -524,7 +524,7 @@ export function RoomSetup() {
               {!state.isAiConfigured && (
                 <p className="text-[11px] text-amber-400/90 mt-2 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>GEMINI_API_KEY is not set in .env.local. Demo mode will be used automatically.</span>
+                  <span>GROQ_API_KEY / GEMINI_API_KEY not set in .env.local. Demo mode will be used automatically.</span>
                 </p>
               )}
             </div>

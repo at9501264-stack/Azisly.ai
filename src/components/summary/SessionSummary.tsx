@@ -147,7 +147,7 @@ export function SessionSummary() {
       '',
       `**Topic:** ${state.config.topic}  `,
       `**Language:** ${state.config.language === 'hinglish' ? 'Hindi-English (Hinglish)' : 'English'}  `,
-      `**Session Mode:** ${metrics.isVoiceMode ? 'Live Voice' : 'Text Practice'} (${metrics.isDemoMode ? 'Scripted Demo Panel' : 'Gemini AI Debaters'})  `,
+      `**Session Mode:** ${metrics.isVoiceMode ? 'Live Voice' : 'Text Practice'} (${metrics.isDemoMode ? 'Scripted Demo Panel' : 'Live AI (Groq + Gemini)'})  `,
       `**Active Duration:** ${formattedDuration} (${state.config.durationMinutes} min configured)  `,
       `**Panel Size:** ${state.participants.length - 2} AI Debaters + 1 Moderator  `,
       `**Report Generated:** ${report ? new Date(report.generatedAt).toLocaleString() : new Date().toLocaleString()}  `,
@@ -371,7 +371,7 @@ export function SessionSummary() {
                   {metrics.isVoiceMode ? 'Live Voice' : 'Text-Only'} Mode
                 </span>
                 <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
-                  {metrics.isDemoMode ? 'Scripted Demo Panel' : 'Gemini AI Debaters'}
+                  {metrics.isDemoMode ? 'Scripted Demo Panel' : 'Live AI (Groq + Gemini)'}
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-zinc-400 mt-1.5">
