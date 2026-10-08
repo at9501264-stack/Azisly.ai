@@ -1,0 +1,453 @@
+/**
+ * Speech Recognition Service for GD Arena.
+ * Handles:
+ * - Realtime audio capture from microphone.
+ * - Primary transport: Sarvam Voice Gateway (PCM 16kHz mono streaming over WebSocket).
+ * - Fallback transport: Web Speech API (webkitSpeechRecognition) for zero-config environments.
+ * - VAD / End-of-turn silence detection with Quick (600ms), Balanced (1000ms), Patient (1500ms) targets.
+ * - Clear separation between:
+ *   1. Partial ephemeral captions (displayed in live caption bar).
+ *   2. Finalized segments.
+ *   3. Committed student turn (committed once when silence target met).
+ */
+
+import { AIPatience } from '@/types/session';
+
+export interface SpeechRecognitionCallbacks {
+  onSpeechStart?: () => void;
+  onPartialTranscript?: (text: string) => void;
+  onTurnCommitted?: (text: string) => void;
+  onError?: (err: Error) => void;
+  onStatusChange?: (status: 'idle' | 'listening' | 'speaking' | 'reconnecting' | 'error') => void;
+}
+
+export interface SpeechRecognitionOptions {
+  patience: AIPatience;
+  language: 'english' | 'hinglish';
+  preferGateway?: boolean;
+}
+
+export class SpeechRecognitionService {
+  private mediaStream: MediaStream | null = null;
+  private audioContext: AudioContext | null = null;
+  private processor: ScriptProcessorNode | null = null;
+  private ws: WebSocket | null = null;
+  // Browser SpeechRecognition fallback reference
+  private browserRecognition: unknown = null;
+  private isListening = false;
+  private isSpeaking = false;
+  private accumulatedFinalText = '';
+  private currentPartialText = '';
+  private silenceTimer: NodeJS.Timeout | null = null;
+  private callbacks: SpeechRecognitionCallbacks = {};
+  private options: SpeechRecognitionOptions = {
+    patience: 'balanced',
+    language: 'english',
+    preferGateway: true
+  };
+
+  private getSilenceThresholdMs(): number {
+    switch (this.options.patience) {
+      case 'quick':
+        return 600;
+      case 'patient':
+        return 1500;
+      case 'balanced':
+      default:
+        return 1000;
+    }
+  }
+
+  public getIsListening(): boolean {
+    return this.isListening;
+  }
+
+  /**
+   * Start live speech recognition.
+   */
+  public async start(
+    callbacks: SpeechRecognitionCallbacks,
+    options: SpeechRecognitionOptions
+  ): Promise<boolean> {
+    this.callbacks = callbacks;
+    this.options = options;
+    this.accumulatedFinalText = '';
+    this.currentPartialText = '';
+    this.isSpeaking = false;
+
+    // Try Gateway if preferred
+    if (this.options.preferGateway) {
+      const gatewaySuccess = await this.startGatewaySTT();
+      if (gatewaySuccess) {
+        this.isListening = true;
+        this.callbacks.onStatusChange?.('listening');
+        return true;
+      }
+    }
+
+    // Fallback to Web Speech API
+    const webSpeechSuccess = this.startWebSpeechSTT();
+    if (webSpeechSuccess) {
+      this.isListening = true;
+      this.callbacks.onStatusChange?.('listening');
+      return true;
+    }
+
+    this.callbacks.onError?.(
+      new Error('Neither Sarvam Voice Gateway nor browser Web Speech API is available.')
+    );
+    this.callbacks.onStatusChange?.('error');
+    return false;
+  }
+
+  /**
+   * Primary: Connect to local Voice Gateway (which proxies to Sarvam Realtime STT).
+   */
+  private async startGatewaySTT(): Promise<boolean> {
+    if (typeof window === 'undefined') return false;
+
+    try {
+      // Determine dynamic gateway endpoints
+      const isHttps = window.location.protocol === 'https:';
+      const defaultHost = `${window.location.hostname || 'localhost'}:3001`;
+      const gatewayHost = process.env.NEXT_PUBLIC_VOICE_GATEWAY_URL || defaultHost;
+      const httpProto = isHttps ? 'https:' : 'http:';
+      const wsProto = isHttps ? 'wss:' : 'ws:';
+
+      // Check if gateway is reachable
+      const healthCheck = await fetch(`${httpProto}//${gatewayHost}/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(1200)
+      }).catch(() => null);
+
+      if (!healthCheck || !healthCheck.ok) {
+        return false;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 16000
+        }
+      });
+      this.mediaStream = stream;
+
+      const langCode = this.options.language === 'hinglish' ? 'hi-IN' : 'en-IN';
+      const wsUrl = `${wsProto}//${gatewayHost}/stt?language_code=${langCode}&model=saaras:v4`;
+
+      const ws = new WebSocket(wsUrl);
+      this.ws = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'partial' && data.transcript) {
+            this.handleSpeechChunk(data.transcript, false);
+          } else if (data.type === 'final' && data.transcript) {
+            this.handleSpeechChunk(data.transcript, true);
+          } else if (data.type === 'status' && !data.ready) {
+            // Gateway reports Sarvam key not configured; fall back
+            this.stopAudioCapture();
+            this.startWebSpeechSTT();
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      ws.onerror = () => {
+        console.warn('[SpeechService] Voice Gateway WS error. Falling back to Web Speech.');
+        this.stopAudioCapture();
+        this.startWebSpeechSTT();
+      };
+
+      ws.onclose = () => {
+        if (this.isListening) {
+          this.callbacks.onStatusChange?.('reconnecting');
+        }
+      };
+
+      // Set up AudioContext to capture and resample PCM chunks to send upstream
+      const audioContext = new (window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({
+        sampleRate: 16000
+      });
+      this.audioContext = audioContext;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      // Use 2048 buffer size (~128ms chunks at 16kHz)
+      const processor = audioContext.createScriptProcessor(2048, 1, 1);
+      this.processor = processor;
+
+      processor.onaudioprocess = (e) => {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+        const inputData = e.inputBuffer.getChannelData(0);
+        // Convert Float32 to 16-bit PCM Linear
+        const pcm16 = new Int16Array(inputData.length);
+        let maxAmp = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          const s = Math.max(-1, Math.min(1, inputData[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+          if (Math.abs(s) > maxAmp) maxAmp = Math.abs(s);
+        }
+
+        // Local amplitude detection for instant interruption trigger
+        if (maxAmp > 0.08 && !this.isSpeaking) {
+          this.triggerSpeechStart();
+        }
+
+        // Send base64-encoded PCM chunk
+        const buffer = pcm16.buffer;
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCodePoint(bytes[i]);
+        }
+        const base64Audio = btoa(binary);
+
+        this.ws.send(
+          JSON.stringify({
+            event: 'audio_input',
+            audio: base64Audio
+          })
+        );
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      return true;
+    } catch (err) {
+      console.warn('[SpeechService] Failed to initialize Voice Gateway:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Fallback: Browser Web Speech API.
+   */
+  private startWebSpeechSTT(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    type SpeechRecognitionType = new () => {
+      continuous: boolean;
+      interimResults: boolean;
+      lang: string;
+      start: () => void;
+      stop: () => void;
+      abort: () => void;
+      onstart: (() => void) | null;
+      onspeechstart: (() => void) | null;
+      onresult: ((event: unknown) => void) | null;
+      onerror: ((event: unknown) => void) | null;
+      onend: (() => void) | null;
+    };
+
+    const SpeechRecognitionAPI: SpeechRecognitionType | undefined =
+      (window as unknown as { SpeechRecognition?: SpeechRecognitionType }).SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionType }).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      return false;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionAPI();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = this.options.language === 'hinglish' ? 'hi-IN' : 'en-IN';
+
+      recognition.onstart = () => {
+        this.callbacks.onStatusChange?.('listening');
+      };
+
+      recognition.onspeechstart = () => {
+        this.triggerSpeechStart();
+      };
+
+      recognition.onresult = (event: unknown) => {
+        const results = (event as {
+          results: { [key: number]: { [key: number]: { transcript: string }; isFinal: boolean; length: number }; length: number };
+          resultIndex: number;
+        }).results;
+
+        let interim = '';
+        for (const item of Array.from(results)) {
+          if (item.isFinal) {
+            this.accumulatedFinalText += (this.accumulatedFinalText ? ' ' : '') + item[0].transcript.trim();
+          } else {
+            interim += item[0].transcript;
+          }
+        }
+
+        const currentActiveText = (this.accumulatedFinalText + ' ' + interim).trim();
+        this.currentPartialText = currentActiveText;
+
+        if (currentActiveText) {
+          this.triggerSpeechStart();
+          this.callbacks.onPartialTranscript?.(currentActiveText);
+          this.resetSilenceTimer();
+        }
+      };
+
+      recognition.onerror = (e: unknown) => {
+        const errType = (e as { error?: string })?.error;
+        if (errType !== 'no-speech') {
+          console.warn('[WebSpeech] Recognition error:', errType);
+        }
+      };
+
+      recognition.onend = () => {
+        if (this.isListening) {
+          // Restart continuously if still in listening mode
+          try {
+            recognition.start();
+          } catch {
+            // Ignore restart error
+          }
+        }
+      };
+
+      recognition.start();
+      this.browserRecognition = recognition;
+      return true;
+    } catch (err) {
+      console.warn('[SpeechService] Web Speech API initialization failed:', err);
+      return false;
+    }
+  }
+
+  private handleSpeechChunk(text: string, isFinal: boolean) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    this.triggerSpeechStart();
+
+    if (isFinal) {
+      this.accumulatedFinalText += (this.accumulatedFinalText ? ' ' : '') + trimmed;
+      this.currentPartialText = this.accumulatedFinalText;
+      this.callbacks.onPartialTranscript?.(this.accumulatedFinalText);
+    } else {
+      const livePreview = (this.accumulatedFinalText + ' ' + trimmed).trim();
+      this.currentPartialText = livePreview;
+      this.callbacks.onPartialTranscript?.(livePreview);
+    }
+
+    this.resetSilenceTimer();
+  }
+
+  private triggerSpeechStart() {
+    if (!this.isSpeaking) {
+      this.isSpeaking = true;
+      this.callbacks.onSpeechStart?.();
+      this.callbacks.onStatusChange?.('speaking');
+    }
+  }
+
+  private resetSilenceTimer() {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+    }
+
+    const threshold = this.getSilenceThresholdMs();
+    this.silenceTimer = setTimeout(() => {
+      this.commitTurnIfReady();
+    }, threshold);
+  }
+
+  /**
+   * Finalizes the student's turn after sufficient silence.
+   */
+  private commitTurnIfReady() {
+    const textToCommit = (this.accumulatedFinalText || this.currentPartialText).trim();
+    if (textToCommit && textToCommit.length > 3) {
+      this.callbacks.onTurnCommitted?.(textToCommit);
+    }
+
+    // Reset buffer for the next turn
+    this.accumulatedFinalText = '';
+    this.currentPartialText = '';
+    this.isSpeaking = false;
+    this.callbacks.onPartialTranscript?.('');
+    this.callbacks.onStatusChange?.('listening');
+  }
+
+  /**
+   * Manual commit trigger (e.g. user presses 'Submit Spoken Turn' or enter).
+   */
+  public forceCommit(): void {
+    if (this.silenceTimer) clearTimeout(this.silenceTimer);
+    this.commitTurnIfReady();
+  }
+
+  private stopAudioCapture() {
+    if (this.processor) {
+      try {
+        this.processor.disconnect();
+      } catch {
+        // Ignore
+      }
+      this.processor = null;
+    }
+
+    if (this.audioContext) {
+      try {
+        this.audioContext.close();
+      } catch {
+        // Ignore
+      }
+      this.audioContext = null;
+    }
+
+    if (this.mediaStream) {
+      try {
+        this.mediaStream.getTracks().forEach((track) => track.stop());
+      } catch {
+        // Ignore
+      }
+      this.mediaStream = null;
+    }
+
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        // Ignore
+      }
+      this.ws = null;
+    }
+  }
+
+  /**
+   * Stops recognition and releases all resources.
+   */
+  public stop(): void {
+    this.isListening = false;
+    this.isSpeaking = false;
+
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+
+    this.stopAudioCapture();
+
+    if (this.browserRecognition) {
+      try {
+        (this.browserRecognition as { stop: () => void; abort: () => void }).abort();
+      } catch {
+        // Ignore
+      }
+      this.browserRecognition = null;
+    }
+
+    this.callbacks.onStatusChange?.('idle');
+  }
+}
+
+export const speechRecognitionService = new SpeechRecognitionService();
