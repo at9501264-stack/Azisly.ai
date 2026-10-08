@@ -28,10 +28,16 @@ export interface SpeechRecognitionOptions {
   preferGateway?: boolean;
 }
 
+interface IAudioProcessorNode {
+  disconnect: () => void;
+  onaudioprocess: ((e: { inputBuffer: { getChannelData: (channel: number) => Float32Array } }) => void) | null;
+  connect: (destination: AudioNode) => AudioNode;
+}
+
 export class SpeechRecognitionService {
   private mediaStream: MediaStream | null = null;
   private audioContext: AudioContext | null = null;
-  private processor: ScriptProcessorNode | null = null;
+  private processor: IAudioProcessorNode | null = null;
   private ws: WebSocket | null = null;
   // Browser SpeechRecognition fallback reference
   private browserRecognition: unknown = null;
@@ -43,6 +49,7 @@ export class SpeechRecognitionService {
   private currentPartialText = '';
   private silenceTimer: NodeJS.Timeout | null = null;
   private callbacks: SpeechRecognitionCallbacks = {};
+
   private options: SpeechRecognitionOptions = {
     patience: 'balanced',
     language: 'english',
@@ -206,13 +213,21 @@ export class SpeechRecognitionService {
 
       const source = audioContext.createMediaStreamSource(stream);
       // Use 2048 buffer size (~128ms chunks at 16kHz)
-      const processor = audioContext.createScriptProcessor(2048, 1, 1);
+      const audioCtxWithProcessor = audioContext as unknown as {
+        createScriptProcessor: (
+          bufferSize: number,
+          inputChannels: number,
+          outputChannels: number
+        ) => IAudioProcessorNode;
+      };
+      const processor = audioCtxWithProcessor.createScriptProcessor(2048, 1, 1);
       this.processor = processor;
 
       processor.onaudioprocess = (e) => {
         if (this.ws?.readyState !== WebSocket.OPEN) return;
 
         const inputData = e.inputBuffer.getChannelData(0);
+
         // Convert Float32 to 16-bit PCM Linear
         const pcm16 = new Int16Array(inputData.length);
         let maxAmp = 0;
@@ -243,7 +258,7 @@ export class SpeechRecognitionService {
       };
 
 
-      source.connect(processor);
+      source.connect(processor as unknown as AudioNode);
       processor.connect(audioContext.destination);
 
       return true;
@@ -434,7 +449,13 @@ export class SpeechRecognitionService {
    * Evaluates whether a transcript segment is a hallucination or noise artifact.
    */
   private isHallucinationOrNoise(text: string): boolean {
-    const normalized = text.toLowerCase().trim().replace(/[.,!?;:]+$/, '');
+    const trimmed = text.toLowerCase().trim();
+    let end = trimmed.length;
+    while (end > 0 && '.,!?;:'.includes(trimmed[end - 1])) {
+      end--;
+    }
+    const normalized = trimmed.slice(0, end);
+
     if (SpeechRecognitionService.KNOWN_HALLUCINATIONS.has(normalized)) {
       return true;
     }
@@ -495,13 +516,10 @@ export class SpeechRecognitionService {
     }
 
     if (this.audioContext) {
-      try {
-        void this.audioContext.close().catch(() => {});
-      } catch {
-        // Ignore
-      }
+      void this.audioContext.close().catch(() => {});
       this.audioContext = null;
     }
+
 
 
     if (this.mediaStream) {
