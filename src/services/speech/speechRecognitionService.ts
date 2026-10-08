@@ -231,6 +231,9 @@ export class SpeechRecognitionService {
       this.processor = processor;
 
       processor.onaudioprocess = (e) => {
+        // While AI is speaking, suppress microphone stream to prevent acoustic loopback self-interruption
+        if (audioPlaybackService.getIsPlaying()) return;
+
         if (this.ws?.readyState !== WebSocket.OPEN) return;
 
         const inputData = e.inputBuffer.getChannelData(0);
@@ -311,6 +314,9 @@ export class SpeechRecognitionService {
       };
 
       recognition.onresult = (event: unknown) => {
+        // While AI is speaking, ignore microphone input to prevent acoustic loopback self-interruption
+        if (audioPlaybackService.getIsPlaying()) return;
+
         const results = (event as {
           results: { [key: number]: { [key: number]: { transcript: string }; isFinal: boolean; length: number }; length: number };
           resultIndex: number;

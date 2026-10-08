@@ -1050,24 +1050,8 @@ export function SessionProvider({
           },
           onPartialTranscript: (text) => {
             if (!isSubscribed) return;
-            const trimmed = text.trim();
-
-            // Verified student barge-in: If AI is actively speaking and student utters verified words,
-            // immediately halt AI playback and grant floor to student
-            if (audioPlaybackService.getIsPlaying() && trimmed.length >= 4) {
-              sarvamSpeechProvider.stop();
-              if (inFlightAbortRef.current) {
-                inFlightAbortRef.current.abort();
-              }
-              setState((prev) => ({
-                ...prev,
-                activeSpeakerId: STUDENT_PARTICIPANT.id,
-                voiceFlowState: 'student_speaking',
-                liveCaption: text,
-                events: [...prev.events, createSessionEvent('student_speech_start')]
-              }));
-              return;
-            }
+            // Ignore during AI speech playback to prevent self-interruption from acoustic bleed
+            if (audioPlaybackService.getIsPlaying()) return;
 
             setState((prev) => ({
               ...prev,

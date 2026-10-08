@@ -28,6 +28,8 @@ export interface PlaybackRequest {
 }
 
 class AudioPlaybackService {
+  private audioContext: AudioContext | null = null;
+  private currentSource: AudioBufferSourceNode | null = null;
   private currentAudio: HTMLAudioElement | null = null;
   private currentAudioUrl: string | null = null;
   private isPlaying = false;
@@ -52,6 +54,19 @@ class AudioPlaybackService {
     }
   }
 
+  private getAudioContext(): AudioContext | null {
+    if (typeof window === 'undefined') return null;
+    if (!this.audioContext) {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioCtx) {
+        this.audioContext = new AudioCtx();
+      }
+    }
+    return this.audioContext;
+  }
+
   public getIsPlaying(): boolean {
     return this.isPlaying;
   }
@@ -70,9 +85,9 @@ class AudioPlaybackService {
   public async unlockAudio(): Promise<boolean> {
     try {
       if (typeof window === 'undefined') return false;
-      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      if (audioCtx.state === 'suspended') {
-        await audioCtx.resume();
+      const ctx = this.getAudioContext();
+      if (ctx && ctx.state === 'suspended') {
+        await ctx.resume();
       }
       const dummyAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
       await dummyAudio.play().catch(() => {});
@@ -97,7 +112,7 @@ class AudioPlaybackService {
     this.callbacks = callbacks;
     this.playbackStartTime = Date.now();
 
-    // Strategy A: Sarvam Audio Base64
+    // Strategy A: Web Audio API playback (most reliable, unaffected by async autoplay expiry)
     if (request.audioBase64) {
       try {
         const binaryString = atob(request.audioBase64);
@@ -106,6 +121,37 @@ class AudioPlaybackService {
         for (let i = 0; i < len; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
+
+        const ctx = this.getAudioContext();
+        if (ctx) {
+          if (ctx.state === 'suspended') {
+            await ctx.resume();
+          }
+
+          try {
+            const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+            this.currentSource = source;
+
+            source.onended = () => {
+              if (this.currentTurnId === request.turnId) {
+                this.currentSource = null;
+                this.finishCleanly();
+              }
+            };
+
+            this.playbackStartTime = Date.now();
+            callbacks.onStart?.();
+            source.start(0);
+            return;
+          } catch (decodeErr) {
+            console.warn('[AudioPlayer] Web Audio decode failed, trying HTML5 Audio fallback:', decodeErr);
+          }
+        }
+
+        // Strategy B: HTML5 Audio fallback
         const blob = new Blob([bytes], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
         this.currentAudioUrl = url;
@@ -141,7 +187,7 @@ class AudioPlaybackService {
       }
     }
 
-    // Strategy B: Browser Web Speech API fallback
+    // Strategy C: Browser Web Speech API fallback
     this.fallbackToWebSpeech(request, callbacks);
   }
 
@@ -208,6 +254,17 @@ class AudioPlaybackService {
     const fullText = this.currentText;
 
     this.isPlaying = false;
+
+    // Immediately stop Web Audio buffer source
+    if (this.currentSource) {
+      try {
+        this.currentSource.stop();
+        this.currentSource.disconnect();
+      } catch {
+        // Ignore stop errors
+      }
+      this.currentSource = null;
+    }
 
     // Immediately stop HTML5 Audio
     if (this.currentAudio) {

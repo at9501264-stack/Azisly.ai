@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSession } from '@/context/SessionContext';
 import { ParticipantCard } from './ParticipantCard';
 import { TranscriptView } from './TranscriptView';
@@ -73,6 +73,20 @@ export function DiscussionRoom() {
     submitStudentTurn(composerText);
     setComposerText('');
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      if (e.code === 'Space' && state.activeSpeakerId && state.activeSpeakerId !== student?.id) {
+        e.preventDefault();
+        interruptCurrentSpeaker();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [state.activeSpeakerId, student?.id, interruptCurrentSpeaker]);
 
   // Phase badge styles
   const getPhaseBadge = () => {
