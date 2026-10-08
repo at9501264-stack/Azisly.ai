@@ -85,9 +85,9 @@ function getTurnPauseMs(patience: AIPatience): number {
 }
 
 function getStudentOpportunityPauseMs(patience: AIPatience): number {
-  if (patience === 'quick') return 3600;
-  if (patience === 'patient') return 6500;
-  return 4800;
+  if (patience === 'quick') return 4500;
+  if (patience === 'patient') return 8500;
+  return 6500;
 }
 
 function getStudentPauseMs(patience: AIPatience): number {
@@ -715,8 +715,19 @@ export function SessionProvider({
               };
             });
 
-            // Brief student-entry window before next AI speaks
-            const pauseBetween = getTurnPauseMs(current.config.patience);
+            // If moderator just finished opening, provide dedicated student opportunity window
+            const isModTurn = nextSpeaker.role === 'moderator';
+            const pauseBetween = isModTurn
+              ? getStudentOpportunityPauseMs(current.config.patience)
+              : getTurnPauseMs(current.config.patience);
+
+            if (isModTurn) {
+              setState((prev) => ({
+                ...prev,
+                awaitingStudentOpportunity: true
+              }));
+            }
+
             scheduleCallback(genId, pauseBetween);
           },
           onInterrupted: (playedDurationMs, deliveredText) => {
@@ -798,7 +809,18 @@ export function SessionProvider({
             };
           });
 
-          const pauseBetween = getTurnPauseMs(current.config.patience);
+          const isModTurn = nextSpeaker.role === 'moderator';
+          const pauseBetween = isModTurn
+            ? getStudentOpportunityPauseMs(current.config.patience)
+            : getTurnPauseMs(current.config.patience);
+
+          if (isModTurn) {
+            setState((prev) => ({
+              ...prev,
+              awaitingStudentOpportunity: true
+            }));
+          }
+
           scheduleCallback(genId, pauseBetween);
         }, readingDurationMs);
       }
@@ -855,15 +877,13 @@ export function SessionProvider({
       return;
     }
 
-    const currentGen = generationRef.current;
-    scheduleNextTurn(currentGen, 1000);
+    // Do NOT overwrite an active timer that was already scheduled (e.g. opportunity pause, reading delay)
+    if (activeTimerRef.current) {
+      return;
+    }
 
-    return () => {
-      if (activeTimerRef.current) {
-        clearTimeout(activeTimerRef.current);
-        activeTimerRef.current = null;
-      }
-    };
+    const currentGen = generationRef.current;
+    scheduleNextTurn(currentGen, 1200);
   }, [
     state.isPaused,
     state.phase,
@@ -880,10 +900,14 @@ export function SessionProvider({
       if (!trimmed) return;
 
       const current = stateRef.current;
-      if (current.phase !== 'discussion' && current.phase !== 'closing') return;
+      if (current.phase === 'setup' || current.phase === 'completed') return;
 
       // Student submission immediately cancels pending AI turn and aborts in-flight audio/generation
       const genId = bumpGeneration();
+      sarvamSpeechProvider.stop();
+      if (inFlightAbortRef.current) {
+        inFlightAbortRef.current.abort();
+      }
 
       const newTurn: TranscriptTurn = {
         id: `turn-student-${Date.now()}`,
@@ -899,9 +923,11 @@ export function SessionProvider({
       };
 
       const isClosingTurn = current.phase === 'closing';
+      const nextPhase = current.phase === 'opening' ? 'discussion' : current.phase;
 
       setState((prev) => ({
         ...prev,
+        phase: nextPhase,
         activeSpeakerId: STUDENT_PARTICIPANT.id,
         voiceFlowState: 'student_speaking',
         isGenerating: false,
@@ -932,20 +958,37 @@ export function SessionProvider({
 
         const pauseBetween = getStudentPauseMs(current.config.patience);
         scheduleNextTurn(genId, pauseBetween);
-      }, 1800);
+      }, 1600);
     },
     [bumpGeneration, scheduleNextTurn]
   );
 
   // Manual interrupt / Take Floor action
   const interruptCurrentSpeaker = useCallback(() => {
-    bumpGeneration();
+    const genId = bumpGeneration();
+    sarvamSpeechProvider.stop();
+    if (inFlightAbortRef.current) {
+      inFlightAbortRef.current.abort();
+    }
     setState((prev) => ({
       ...prev,
+      phase: prev.phase === 'opening' ? 'discussion' : prev.phase,
       activeSpeakerId: STUDENT_PARTICIPANT.id,
       voiceFlowState: 'student_speaking',
       events: [...prev.events, createSessionEvent('tts_interrupted', { manual: true })]
     }));
+
+    // Safety timeout: If user clicks interrupt but doesn't speak within 7s, return floor to listening
+    if (activeTimerRef.current) clearTimeout(activeTimerRef.current);
+    activeTimerRef.current = setTimeout(() => {
+      if (generationRef.current !== genId) return;
+      setState((prev) => ({
+        ...prev,
+        activeSpeakerId: null,
+        voiceFlowState: 'listening'
+      }));
+      scheduleNextTurnRef.current(genId, 1200);
+    }, 7000);
   }, [bumpGeneration]);
 
   // Voice Recognition Streaming lifecycle

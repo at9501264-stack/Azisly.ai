@@ -178,10 +178,14 @@ export class SpeechRecognitionService {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'partial' && data.transcript) {
-            this.handleSpeechChunk(data.transcript, false);
-          } else if (data.type === 'final' && data.transcript) {
-            this.handleSpeechChunk(data.transcript, true);
+          const transcript = data.transcript || data.text || data.data?.transcript || data.data?.text || '';
+          const isPartial = data.type === 'partial' || data.event === 'transcript.partial' || (data.type === 'data' && data.is_partial);
+          const isFinal = data.type === 'final' || data.event === 'transcript.final' || (data.type === 'data' && !data.is_partial);
+
+          if (isPartial && transcript) {
+            this.handleSpeechChunk(transcript, false);
+          } else if (isFinal && transcript) {
+            this.handleSpeechChunk(transcript, true);
           } else if (data.type === 'status' && !data.ready) {
             // Gateway reports Sarvam key not configured; fall back
             this.stopAudioCapture();
@@ -319,16 +323,21 @@ export class SpeechRecognitionService {
           resultIndex: number;
         }).results;
 
+        let finals = '';
         let interim = '';
-        for (const item of Array.from(results)) {
+        const items = Array.from(results);
+        for (const item of items) {
+          const phrase = item[0]?.transcript?.trim() || '';
+          if (!phrase) continue;
           if (item.isFinal) {
-            this.accumulatedFinalText += (this.accumulatedFinalText ? ' ' : '') + item[0].transcript.trim();
+            finals += (finals ? ' ' : '') + phrase;
           } else {
-            interim += item[0].transcript;
+            interim += (interim ? ' ' : '') + phrase;
           }
         }
 
-        const currentActiveText = (this.accumulatedFinalText + ' ' + interim).trim();
+        this.accumulatedFinalText = finals;
+        const currentActiveText = (finals ? `${finals} ${interim}` : interim).trim();
         this.currentPartialText = currentActiveText;
 
         const cleanChars = currentActiveText.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');

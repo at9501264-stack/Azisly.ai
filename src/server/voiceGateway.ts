@@ -210,25 +210,43 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
           const parsed = JSON.parse(text);
 
           // Normalize Sarvam realtime transcription events
-          if (parsed.type === 'data' && parsed.data?.transcript) {
+          const textContent =
+            parsed.text ||
+            parsed.transcript ||
+            parsed.data?.transcript ||
+            parsed.data?.text ||
+            '';
+
+          const isFinal =
+            parsed.event === 'transcript.final' ||
+            parsed.type === 'final' ||
+            (parsed.type === 'data' && !parsed.is_partial);
+
+          const isPartial =
+            parsed.event === 'transcript.partial' ||
+            parsed.type === 'partial' ||
+            (parsed.type === 'data' && parsed.is_partial);
+
+          if (isFinal && textContent) {
             clientWs.send(
               JSON.stringify({
                 type: 'final',
-                transcript: parsed.data.transcript,
-                metrics: parsed.data.metrics
+                transcript: textContent,
+                metrics: parsed.metrics || parsed.data?.metrics
               })
             );
-          } else if (parsed.event === 'transcript.partial' || parsed.type === 'partial') {
+          } else if (isPartial && textContent) {
             clientWs.send(
               JSON.stringify({
                 type: 'partial',
-                transcript: parsed.transcript || parsed.data?.transcript || ''
+                transcript: textContent
               })
             );
           } else {
             // Pass-through other events
             clientWs.send(text);
           }
+
         } catch {
           // Fallback pass-through if unparsed
           clientWs.send(text);

@@ -48,7 +48,7 @@ export function AudioPreflightModal({
     setVolumeLevel(0);
   }, []);
 
-  const requestMicrophoneAccess = async () => {
+  const requestMicrophoneAccess = useCallback(async () => {
     cleanupAudio();
     setPermissionState('requesting');
     setErrorMessage(null);
@@ -123,7 +123,7 @@ export function AudioPreflightModal({
         setErrorMessage(`Microphone error: ${error.message || 'Unknown device error'}`);
       }
     }
-  };
+  }, [cleanupAudio]);
 
   const handleTestTone = async () => {
     setIsTestTonePlaying(true);
@@ -160,6 +160,21 @@ export function AudioPreflightModal({
     setErrorMessage(null);
     onClose();
   };
+
+  useEffect(() => {
+    let active = true;
+    if (isOpen && permissionState === 'prompt') {
+      const timer = setTimeout(() => {
+        if (active) {
+          void requestMicrophoneAccess();
+        }
+      }, 100);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
+    }
+  }, [isOpen, permissionState, requestMicrophoneAccess]);
 
   useEffect(() => {
     return () => {
@@ -330,12 +345,20 @@ export function AudioPreflightModal({
           </button>
 
           <button
-            onClick={() => {
-              cleanupAudio();
-              onConfirmVoiceMode();
+            onClick={async () => {
+              if (permissionState === 'granted') {
+                cleanupAudio();
+                onConfirmVoiceMode();
+              } else if (permissionState === 'prompt') {
+                await requestMicrophoneAccess();
+                cleanupAudio();
+                onConfirmVoiceMode();
+              } else {
+                cleanupAudio();
+                onConfirmVoiceMode();
+              }
             }}
-            disabled={permissionState !== 'granted'}
-            className="px-4 py-2 bg-zinc-100 hover:bg-white disabled:opacity-40 text-zinc-950 font-semibold text-xs rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Enter Discussion Room</span>

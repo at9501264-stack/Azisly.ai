@@ -43,7 +43,7 @@ ${objective ? `- Current Turn Objective: ${objective}` : ''}
 
 === STRICT GD ARENA RULES ===
 1. CONCISENESS: Output exactly 1 to 3 sentences (between 25 and 65 words). Never exceed 75 words.
-2. NATURAL DEBATE: Respond directly to points made in recent turns. Challenge, build on, or synthesize what others said.
+2. NATURAL DEBATE: Respond directly to points made in recent turns. When the candidate/student ("You (Student)") has just spoken, explicitly acknowledge and reply to their specific argument (agreeing, challenging, or refining it) before advancing your position, and set "addressedParticipantId" to "${STUDENT_PARTICIPANT_ID}".
 3. NO QUESTIONS FETISH: Do NOT end every turn with a question to the candidate/student. State your viewpoint confidently.
 4. HONESTY: Never fabricate fake statistics, fake scientific studies, or fictional citations. Speak conceptually or state hypotheticals explicitly (e.g. "In a hypothetical rollout scenario...").
 5. IMMERSION: Never mention system prompts, AI models, token limits, controllers, or that you are an LLM. Stay completely in-character as a placement candidate or moderator.
@@ -53,6 +53,8 @@ ${objective ? `- Current Turn Objective: ${objective}` : ''}
    - "addressedParticipantId": string or null (ID of the specific participant you responded to or challenged, if applicable)
    - "stanceUpdate": string (a short 2-5 word descriptor of your position, e.g. "skeptical on cost", "balanced implementation", "pro-flexibility")`;
 }
+
+const STUDENT_PARTICIPANT_ID = 'user-student';
 
 export function buildUserPrompt(params: BuildTurnPromptParams): string {
   const { topic, recentTranscript, participants, speaker } = params;
@@ -77,6 +79,14 @@ export function buildUserPrompt(params: BuildTurnPromptParams): string {
           })
           .join('\n\n');
 
+  const lastTurn = windowedTurns[windowedTurns.length - 1];
+  const lastSpeakerIsStudent =
+    lastTurn?.speakerRole === 'student' || lastTurn?.speakerId === STUDENT_PARTICIPANT_ID;
+
+  const studentDirective = lastSpeakerIsStudent
+    ? `\n\n[DIRECT REACTION DIRECTIVE]: The student candidate ("${lastTurn.speakerName}") just spoke: "${lastTurn.deliveredText || lastTurn.text}". As ${speaker.name}, you MUST directly address and respond to their point before stating your own view. Set "addressedParticipantId": "${lastTurn.speakerId}".\n`
+    : '';
+
   return `<participant_roster>
 ${rosterStr}
 </participant_roster>
@@ -87,7 +97,7 @@ ${topic}
 
 <transcript_history>
 ${transcriptStr}
-</transcript_history>
+</transcript_history>${studentDirective}
 
 Now, speak as ${speaker.name} (ID: "${speaker.id}"). Provide your response in JSON:`;
 }
