@@ -305,7 +305,7 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
   tryConnectUpstream(0);
 
   // Handle client messages (forwarding audio chunks)
-  clientWs.on('message', (message: RawData) => {
+  clientWs.on('message', (message: RawData, isBinary: boolean) => {
     const byteLength = getRawDataByteLength(message);
 
     if (byteLength > MAX_MESSAGE_BYTES) {
@@ -314,7 +314,24 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
     }
 
     if (upstreamWs?.readyState === WebSocket.OPEN) {
-      upstreamWs.send(message);
+      if (isBinary) {
+        upstreamWs.send(message, { binary: true });
+      } else {
+        // If client sent JSON with audio base64, decode to binary linear16 PCM
+        const str = rawDataToString(message);
+        try {
+          const parsed = JSON.parse(str);
+          const base64Audio = parsed.audio || parsed.data;
+          if (base64Audio && typeof base64Audio === 'string') {
+            const buf = Buffer.from(base64Audio, 'base64');
+            upstreamWs.send(buf, { binary: true });
+            return;
+          }
+        } catch {
+          // Not JSON, pass through as text
+        }
+        upstreamWs.send(message, { binary: false });
+      }
     }
   });
 

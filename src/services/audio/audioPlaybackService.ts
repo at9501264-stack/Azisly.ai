@@ -38,6 +38,20 @@ class AudioPlaybackService {
   private callbacks: PlaybackCallbacks | null = null;
   private isUnlocked = false;
 
+  constructor() {
+    if (typeof window !== 'undefined') {
+      const unlock = () => {
+        void this.unlockAudio();
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('touchstart', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
+      window.addEventListener('click', unlock, { once: true, passive: true });
+      window.addEventListener('touchstart', unlock, { once: true, passive: true });
+      window.addEventListener('keydown', unlock, { once: true, passive: true });
+    }
+  }
+
   public getIsPlaying(): boolean {
     return this.isPlaying;
   }

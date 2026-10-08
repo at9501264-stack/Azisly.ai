@@ -40,7 +40,7 @@ export async function generateLlmCompletion(
   // 1. PRIMARY PROVIDER: Groq
   // =========================================================================
   if (groqApiKey && groqApiKey.length > 5) {
-    const groqModel = process.env.GROQ_MODEL?.trim() || 'openai/gpt-oss-120b';
+    const groqModel = process.env.GROQ_MODEL?.trim() || 'qwen/qwen3.8-27b';
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -57,8 +57,8 @@ export async function generateLlmCompletion(
         content: `${userPrompt}\n\nRespond strictly with a valid JSON object.`
       });
 
-      // Allocate at least 1024 tokens so Groq reasoning models have ample room for reasoning + output
-      const groqMaxTokens = Math.max(maxTokens, 1200);
+      // Rapid conversational token budget (~150-350 tokens for ultra-low latency response in <300ms)
+      const groqMaxTokens = Math.min(Math.max(maxTokens, 150), 400);
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',

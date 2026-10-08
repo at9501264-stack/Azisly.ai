@@ -179,13 +179,14 @@ export class SpeechRecognitionService {
         try {
           const data = JSON.parse(event.data);
           const transcript = data.transcript || data.text || data.data?.transcript || data.data?.text || '';
-          const isPartial = data.type === 'partial' || data.event === 'transcript.partial' || (data.type === 'data' && data.is_partial);
           const isFinal = data.type === 'final' || data.event === 'transcript.final' || (data.type === 'data' && !data.is_partial);
 
-          if (isPartial && transcript) {
-            this.handleSpeechChunk(transcript, false);
-          } else if (isFinal && transcript) {
-            this.handleSpeechChunk(transcript, true);
+          if (transcript) {
+            this.handleSpeechChunk(transcript, Boolean(isFinal));
+          } else if (data.event === 'speech.start' || data.type === 'speech.start') {
+            if (!audioPlaybackService.getIsPlaying()) {
+              this.triggerSpeechStart();
+            }
           } else if (data.type === 'status' && !data.ready) {
             // Gateway reports Sarvam key not configured; fall back
             this.stopAudioCapture();
@@ -202,9 +203,11 @@ export class SpeechRecognitionService {
         this.startWebSpeechSTT();
       };
 
-      ws.onclose = () => {
-        if (this.isListening) {
-          this.callbacks.onStatusChange?.('reconnecting');
+      ws.onclose = (ev) => {
+        if (this.isListening && ev.code !== 1000) {
+          console.warn('[SpeechService] Voice Gateway WS closed unexpectedly. Falling back to Web Speech.');
+          this.stopAudioCapture();
+          this.startWebSpeechSTT();
         }
       };
 
@@ -243,22 +246,12 @@ export class SpeechRecognitionService {
 
         this.processVadAmplitude(maxAmp);
 
-        // Send base64-encoded PCM chunk
-        const buffer = pcm16.buffer;
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCodePoint(bytes[i]);
+        // Stream raw binary Linear16 PCM chunk directly over WebSocket
+        try {
+          this.ws.send(pcm16.buffer);
+        } catch {
+          // Socket transmission error
         }
-        const base64Audio = btoa(binary);
-
-        this.ws.send(
-          JSON.stringify({
-            event: 'audio_input',
-            audio: base64Audio
-          })
-        );
       };
 
 

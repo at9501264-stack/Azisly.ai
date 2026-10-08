@@ -64,6 +64,7 @@ export interface SpeechSynthesisOptions {
   onEnd?: () => void;
   onError?: (err: Error) => void;
   onInterrupted?: (playedDurationMs: number, approxDeliveredText: string) => void;
+  onAudioBlocked?: () => void;
 }
 
 export interface SpeechSynthesisResult {

@@ -685,6 +685,9 @@ export function SessionProvider({
           languageCode,
           pace,
           abortSignal: abortController.signal,
+          onAudioBlocked: () => {
+            setState((prev) => ({ ...prev, isAudioBlocked: true }));
+          },
           onStart: () => {
             if (generationRef.current !== genId) return;
             setState((prev) => ({

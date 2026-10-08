@@ -50,7 +50,8 @@ export class SarvamSpeechProvider implements ISpeechSynthesisProvider {
           onStart: options.onStart,
           onEnd: options.onEnd,
           onInterrupted: options.onInterrupted,
-          onError: options.onError
+          onError: options.onError,
+          onAudioBlocked: options.onAudioBlocked
         }
       );
 
