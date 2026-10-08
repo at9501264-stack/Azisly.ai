@@ -33,18 +33,18 @@ export function CoachingNudgeArea({ activeSpeaker, phase }: Readonly<CoachingNud
   }
 
   return (
-    <div className="p-3 sm:p-3.5 rounded-xl bg-[#0d1629] border border-teal-500/30 flex items-start gap-3">
-      <div className="w-7 h-7 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center shrink-0 mt-0.5">
-        <Lightbulb className="w-4 h-4" />
+    <div className="p-3 sm:p-3.5 rounded-xl bg-[#141417] border border-[#27272a] flex items-start gap-3">
+      <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 flex items-center justify-center shrink-0 mt-0.5">
+        <Lightbulb className="w-4 h-4 text-zinc-300" />
       </div>
       <div className="flex-1 text-xs">
         <div className="flex items-center gap-1.5 mb-0.5">
-          <span className="font-semibold text-teal-300">Coaching Nudge</span>
-          <span className="text-[10px] text-slate-400 font-mono">
+          <span className="font-semibold text-zinc-200">Coaching Nudge</span>
+          <span className="text-[10px] text-zinc-500 font-mono">
             (Evidence-Based Coach • Phase 4)
           </span>
         </div>
-        <p className="text-slate-300 leading-relaxed">{tip}</p>
+        <p className="text-zinc-400 leading-relaxed">{tip}</p>
       </div>
     </div>
   );

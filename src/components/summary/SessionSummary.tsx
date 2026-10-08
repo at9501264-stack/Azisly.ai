@@ -28,23 +28,23 @@ function getRatingBadge(rating: DimensionRating) {
     case 'Strength':
       return {
         label: 'Strength',
-        className: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+        className: 'bg-zinc-900 text-emerald-300 border-zinc-700'
       };
     case 'Developing':
       return {
         label: 'Developing',
-        className: 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+        className: 'bg-zinc-900 text-zinc-300 border-zinc-800'
       };
     case 'Needs practice':
       return {
         label: 'Needs practice',
-        className: 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+        className: 'bg-zinc-900 text-amber-300 border-zinc-800'
       };
     case 'Not observed':
     default:
       return {
         label: 'Not observed',
-        className: 'bg-slate-800 text-slate-400 border-slate-700'
+        className: 'bg-zinc-900 text-zinc-500 border-zinc-800'
       };
   }
 }
@@ -56,24 +56,24 @@ function getTranscriptTurnCardStyle(
   isInterrupted: boolean
 ): string {
   if (isHighlighted) {
-    return 'ring-2 ring-teal-400 border-teal-400 bg-teal-950/40 shadow-lg shadow-teal-500/20';
+    return 'ring-1 ring-white border-zinc-500 bg-zinc-800/80';
   }
   if (isStudent) {
-    return 'bg-teal-950/25 border-teal-500/40 ml-2';
+    return 'bg-[#18181c] border-[#3f3f46] ml-2';
   }
   if (isModerator) {
-    return 'bg-emerald-950/15 border-emerald-500/30';
+    return 'bg-[#141417] border-[#27272a]';
   }
   if (isInterrupted) {
-    return 'bg-amber-950/20 border-amber-600/40';
+    return 'bg-[#1a1815] border-amber-900/40';
   }
-  return 'bg-[#111a2f] border-slate-800';
+  return 'bg-[#141417] border-[#27272a]';
 }
 
 function getTranscriptSpeakerColor(isStudent: boolean, isModerator: boolean): string {
-  if (isStudent) return 'text-teal-300';
-  if (isModerator) return 'text-emerald-300';
-  return 'text-slate-200';
+  if (isStudent) return 'text-white font-semibold';
+  if (isModerator) return 'text-zinc-200 font-semibold';
+  return 'text-zinc-300';
 }
 
 function formatDurationMs(ms: number | null): string {
@@ -325,17 +325,17 @@ export function SessionSummary() {
   );
 
   return (
-    <div className="min-h-screen bg-[#080d1a] text-slate-100 flex flex-col justify-between">
+    <div className="min-h-screen bg-[#0c0c0e] text-zinc-100 flex flex-col justify-between">
       {/* Top Header */}
-      <header className="border-b border-slate-800/80 bg-[#0b1222]/90 backdrop-blur sticky top-0 z-20">
+      <header className="border-b border-[#27272a] bg-[#0c0c0e]/90 backdrop-blur sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400 font-bold text-xs">
+            <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-100 font-bold text-xs">
               GD
             </div>
             <div>
               <span className="font-semibold text-base text-white">GD Arena</span>
-              <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded bg-teal-500/10 text-teal-300 border border-teal-500/20">
+              <span className="ml-2 text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
                 Phase 4 Evidence Report
               </span>
             </div>
@@ -345,7 +345,7 @@ export function SessionSummary() {
             <button
               onClick={resetSession}
               id="practise-again-top-btn"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition shadow-md shadow-teal-500/10"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Practise again</span>
@@ -357,25 +357,25 @@ export function SessionSummary() {
       {/* Main Container */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full space-y-6">
         {/* Completion Banner */}
-        <div className="p-6 rounded-2xl bg-[#0d1629] border border-teal-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="p-6 rounded-2xl bg-[#141417] border border-[#27272a] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center shrink-0 mt-0.5">
-              <CheckCircle2 className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 flex items-center justify-center shrink-0 mt-0.5">
+              <CheckCircle2 className="w-5 h-5 text-zinc-200" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                   Group Discussion Completed
                 </h1>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
                   {metrics.isVoiceMode ? 'Live Voice' : 'Text-Only'} Mode
                 </span>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
                   {metrics.isDemoMode ? 'Scripted Demo Panel' : 'Gemini AI Debaters'}
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1.5">
-                Topic: <span className="text-white font-medium">&ldquo;{state.config.topic}&rdquo;</span>
+              <p className="text-xs sm:text-sm text-zinc-400 mt-1.5">
+                Topic: <span className="text-zinc-200 font-medium">&ldquo;{state.config.topic}&rdquo;</span>
               </p>
             </div>
           </div>
@@ -384,27 +384,27 @@ export function SessionSummary() {
             <button
               onClick={handleDownloadMarkdownReport}
               id="download-markdown-report-btn"
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#131e36] hover:bg-[#1a2948] text-teal-300 border border-teal-500/40 text-xs font-semibold transition"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition"
               title="Download structured report as Markdown"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 text-zinc-400" />
               <span>Report (.md)</span>
             </button>
 
             <button
               onClick={handleDownloadJSON}
               id="download-json-btn"
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#131e36] hover:bg-[#1a2948] text-slate-300 border border-slate-700 text-xs font-semibold transition"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition"
               title="Download session & metrics JSON"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 text-zinc-400" />
               <span>Data (.json)</span>
             </button>
 
             <button
               onClick={resetSession}
               id="practise-again-btn"
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition shadow-lg shadow-teal-500/20"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-bold transition"
             >
               <RotateCcw className="w-4 h-4" />
               <span>Practise again</span>
@@ -414,72 +414,72 @@ export function SessionSummary() {
 
         {/* Overview Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-4 rounded-xl bg-[#0d1527] border border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-              <Clock className="w-3.5 h-3.5 text-teal-400" />
+          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
+              <Clock className="w-3.5 h-3.5 text-zinc-400" />
               <span>Elapsed Duration</span>
             </div>
-            <p className="text-lg font-bold text-slate-100 font-mono">{formattedDuration}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">{formattedDuration}</p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
               {state.config.durationMinutes}m target limit
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#0d1527] border border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-              <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
+              <MessageSquare className="w-3.5 h-3.5 text-zinc-400" />
               <span>Total Turns</span>
             </div>
-            <p className="text-lg font-bold text-slate-100 font-mono">{totalTurns}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">{totalTurns}</p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
               {metrics.turnCountsBySpeaker[studentParticipant?.id || ''] || 0} student turns
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#0d1527] border border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-              <Mic className="w-3.5 h-3.5 text-teal-400" />
+          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
+              <Mic className="w-3.5 h-3.5 text-zinc-400" />
               <span>Candidate Voice Time</span>
             </div>
-            <p className="text-lg font-bold text-slate-100 font-mono">
+            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">
               {metrics.isVoiceMode
                 ? formatDurationMs(metrics.studentSpeakingDurationMs)
                 : 'Unavailable'}
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-zinc-500 mt-0.5">
               {metrics.isVoiceMode ? 'Approx. VAD voice interval' : 'Text-only session'}
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-[#0d1527] border border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-              <Volume2 className="w-3.5 h-3.5 text-teal-400" />
+          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
+              <Volume2 className="w-3.5 h-3.5 text-zinc-400" />
               <span>AI Audio Time</span>
             </div>
-            <p className="text-lg font-bold text-slate-100 font-mono">
+            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">
               {metrics.isVoiceMode
                 ? formatDurationMs(
                     Object.values(metrics.aiPlaybackDurationMs).reduce((a, b) => a + b, 0)
                   )
                 : 'Unavailable'}
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-zinc-500 mt-0.5">
               {metrics.isVoiceMode ? 'Actual delivered playback' : 'Text-only session'}
             </p>
           </div>
         </div>
 
         {/* Deterministic Participation & Speaking Share Breakdown */}
-        <section className="p-5 sm:p-6 rounded-2xl bg-[#0d1527] border border-slate-800 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+        <section className="p-5 sm:p-6 rounded-2xl bg-[#141417] border border-[#27272a] space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
             <div>
               <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-teal-400" />
+                <Users className="w-4 h-4 text-zinc-300" />
                 Participation & Speaking Share Breakdown
               </h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-zinc-500 mt-0.5">
                 Calculated deterministically in code. Denominator:{' '}
-                <span className="text-slate-300 font-medium">
+                <span className="text-zinc-300 font-medium">
                   {metrics.isVoiceMode
                     ? `${formatDurationMs(metrics.totalActiveSpeakingDurationMs)} active speaking duration across all speakers`
                     : `${metrics.totalTurns} total committed turns`}
@@ -491,7 +491,7 @@ export function SessionSummary() {
 
           {/* Student Row */}
           {studentParticipant && (
-            <div className="p-3.5 rounded-xl border bg-teal-950/20 border-teal-500/40 space-y-2">
+            <div className="p-3.5 rounded-xl border bg-zinc-900/60 border-zinc-700 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <div
@@ -500,29 +500,29 @@ export function SessionSummary() {
                     {studentParticipant.initials}
                   </div>
                   <div>
-                    <span className="font-semibold text-teal-300">You (Candidate)</span>
-                    <span className="text-[10px] text-slate-400 ml-2">
+                    <span className="font-semibold text-zinc-100">You (Candidate)</span>
+                    <span className="text-[10px] text-zinc-400 ml-2">
                       {metrics.turnCountsBySpeaker[studentParticipant.id] || 0} turns
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right flex items-center gap-3">
-                  <span className="font-mono text-slate-300 text-xs">
+                  <span className="font-mono text-zinc-400 text-xs">
                     {metrics.isVoiceMode
                       ? `${formatDurationMs(metrics.studentSpeakingDurationMs)} (VAD)`
                       : 'Text mode'}
                   </span>
-                  <span className="font-mono font-bold text-teal-300 text-sm">
+                  <span className="font-mono font-bold text-white text-sm">
                     {metrics.speakingSharePercent[studentParticipant.id] || 0}% share
                   </span>
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+              <div className="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
                 <div
-                  className="h-full bg-teal-400 rounded-full transition-all duration-500"
+                  className="h-full bg-zinc-100 rounded-full transition-all duration-500"
                   style={{
                     width: `${Math.min(100, metrics.speakingSharePercent[studentParticipant.id] || 0)}%`
                   }}
@@ -533,7 +533,7 @@ export function SessionSummary() {
 
           {/* AI Debaters Grid / List */}
           <div className="space-y-2.5 pt-1">
-            <p className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+            <p className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">
               AI Discussion Participants
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -545,7 +545,7 @@ export function SessionSummary() {
                 return (
                   <div
                     key={p.id}
-                    className="p-3 rounded-xl border bg-[#111a2f] border-slate-800/80 space-y-1.5"
+                    className="p-3 rounded-xl border bg-zinc-900/40 border-zinc-800 space-y-1.5"
                   >
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
@@ -555,26 +555,26 @@ export function SessionSummary() {
                           {p.initials}
                         </div>
                         <div>
-                          <span className="font-medium text-slate-200">{p.name}</span>
-                          <span className="text-[10px] text-slate-400 ml-1.5">{p.personality}</span>
+                          <span className="font-medium text-zinc-200">{p.name}</span>
+                          <span className="text-[10px] text-zinc-500 ml-1.5">{p.personality}</span>
                         </div>
                       </div>
 
                       <div className="text-right">
-                        <span className="font-mono font-semibold text-slate-300 text-xs">
+                        <span className="font-mono font-semibold text-zinc-300 text-xs">
                           {share}%
                         </span>
                       </div>
                     </div>
 
-                    <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
                       <div
-                        className="h-full bg-sky-400 rounded-full transition-all duration-500"
+                        className="h-full bg-zinc-400 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min(100, share)}%` }}
                       />
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
                       <span>{turns} {turns === 1 ? 'turn' : 'turns'}</span>
                       <span>{metrics.isVoiceMode ? formatDurationMs(durMs) : 'Text'}</span>
                     </div>
@@ -586,7 +586,7 @@ export function SessionSummary() {
 
           {/* Separate Moderator Row */}
           {moderatorParticipant && (
-            <div className="p-3 rounded-xl border bg-emerald-950/15 border-emerald-500/30 flex items-center justify-between text-xs">
+            <div className="p-3 rounded-xl border bg-zinc-900/30 border-zinc-800 flex items-center justify-between text-xs">
               <div className="flex items-center gap-2.5">
                 <div
                   className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] ${moderatorParticipant.avatarColor}`}
@@ -594,22 +594,22 @@ export function SessionSummary() {
                   {moderatorParticipant.initials}
                 </div>
                 <div>
-                  <span className="font-semibold text-emerald-300">
+                  <span className="font-semibold text-zinc-200">
                     {moderatorParticipant.name} (Moderator)
                   </span>
-                  <span className="text-[10px] text-slate-400 ml-2">
+                  <span className="text-[10px] text-zinc-500 ml-2">
                     {metrics.turnCountsBySpeaker[moderatorParticipant.id] || 0} framing & transition turns
                   </span>
                 </div>
               </div>
 
               <div className="flex items-center gap-3 text-right">
-                <span className="font-mono text-slate-400 text-[11px]">
+                <span className="font-mono text-zinc-500 text-[11px]">
                   {metrics.isVoiceMode
                     ? formatDurationMs(metrics.moderatorPlaybackDurationMs)
                     : 'Text mode'}
                 </span>
-                <span className="font-mono text-emerald-300 font-medium text-xs">
+                <span className="font-mono text-zinc-300 font-medium text-xs">
                   {metrics.speakingSharePercent[moderatorParticipant.id] || 0}% share
                 </span>
               </div>
@@ -618,20 +618,20 @@ export function SessionSummary() {
 
           {/* Timing & Flow Milestones */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
-            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-              <span className="text-[11px] text-slate-400 block mb-0.5">First Contribution</span>
-              <span className="font-semibold text-slate-200">
+            <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
+              <span className="text-[11px] text-zinc-500 block mb-0.5">First Contribution</span>
+              <span className="font-semibold text-zinc-200">
                 {metrics.studentFirstContributionSecs !== null
                   ? `${metrics.studentFirstContributionSecs}s into discussion`
                   : 'Did not volunteer'}
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-              <span className="text-[11px] text-slate-400 block mb-0.5">Closing Phase</span>
+            <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
+              <span className="text-[11px] text-zinc-500 block mb-0.5">Closing Phase</span>
               <span
                 className={`font-semibold ${
-                  metrics.studentContributedInClosing ? 'text-teal-300' : 'text-slate-400'
+                  metrics.studentContributedInClosing ? 'text-zinc-200' : 'text-zinc-500'
                 }`}
               >
                 {metrics.studentContributedInClosing
@@ -640,8 +640,8 @@ export function SessionSummary() {
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-              <span className="text-[11px] text-slate-400 block mb-0.5">
+            <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
+              <span className="text-[11px] text-zinc-500 block mb-0.5">
                 Barge-In / Interruption Overlaps
               </span>
               <span className="font-semibold text-amber-300">
@@ -657,19 +657,19 @@ export function SessionSummary() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <div className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-teal-400" />
+                <Award className="w-5 h-5 text-zinc-300" />
                 <h2 className="text-base font-bold text-white tracking-tight">
                   Evidence-Backed Coaching Evaluation
                 </h2>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-zinc-400 mt-0.5">
                 Evaluated strictly against observable behaviours. All strengths and coaching tips are verified with verbatim transcript quotes.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               {isReportStale && (
-                <span className="text-[10px] text-amber-400 bg-amber-950/40 border border-amber-600/30 px-2 py-0.5 rounded">
+                <span className="text-[10px] text-amber-400 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-full">
                   Report stale
                 </span>
               )}
@@ -677,7 +677,7 @@ export function SessionSummary() {
                 onClick={() => generateReport(true)}
                 disabled={isGeneratingReport}
                 id="regenerate-report-btn"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#131e36] hover:bg-[#1c2c4e] text-teal-300 border border-teal-500/30 text-xs font-semibold transition disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition disabled:opacity-50"
               >
                 <RefreshCw
                   className={`w-3.5 h-3.5 ${isGeneratingReport ? 'animate-spin' : ''}`}
@@ -689,13 +689,13 @@ export function SessionSummary() {
 
           {/* Loading State */}
           {isGeneratingReport && (
-            <div className="p-8 rounded-2xl bg-[#0d1629] border border-teal-500/30 flex flex-col items-center justify-center text-center space-y-3">
-              <div className="w-10 h-10 rounded-full border-2 border-teal-500/20 border-t-teal-400 animate-spin" />
+            <div className="p-8 rounded-2xl bg-[#141417] border border-[#27272a] flex flex-col items-center justify-center text-center space-y-3">
+              <div className="w-10 h-10 rounded-full border-2 border-zinc-800 border-t-zinc-200 animate-spin" />
               <div>
                 <h3 className="font-semibold text-sm text-white">
                   Synthesizing Evidence & Verifying Quotes...
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 max-w-md">
+                <p className="text-xs text-zinc-400 mt-1 max-w-md">
                   Analyzing candidate initiations, argument quality, collaborative listening, and matching verbatim transcript turns with zero hallucinated timestamps.
                 </p>
               </div>
@@ -704,19 +704,19 @@ export function SessionSummary() {
 
           {/* Error Banner */}
           {reportError && !isGeneratingReport && (
-            <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-500/40 flex items-start justify-between gap-3 text-xs text-rose-200">
+            <div className="p-4 rounded-xl bg-[#181111] border border-red-900/50 flex items-start justify-between gap-3 text-xs text-red-200">
               <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                 <div>
                   <strong>Report Generation Notice:</strong> {reportError}
-                  <p className="text-[11px] text-rose-300/80 mt-0.5">
+                  <p className="text-[11px] text-red-300/80 mt-0.5">
                     Your session metrics and transcript above are fully preserved and calculated locally.
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => generateReport(true)}
-                className="shrink-0 px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 text-xs font-medium"
+                className="shrink-0 px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium"
               >
                 Retry
               </button>
@@ -732,7 +732,7 @@ export function SessionSummary() {
                 return (
                   <div
                     key={dim.id}
-                    className="p-5 rounded-2xl bg-[#0d1527] border border-slate-800 flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
+                    className="p-5 rounded-2xl bg-[#141417] border border-[#27272a] flex flex-col justify-between space-y-4 hover:border-zinc-700 transition"
                   >
                     <div>
                       {/* Dimension Header */}
@@ -741,23 +741,23 @@ export function SessionSummary() {
                           {dim.name}
                         </h3>
                         <span
-                          className={`text-[11px] font-semibold px-2 py-0.5 rounded border shrink-0 font-mono ${badge.className}`}
+                          className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border shrink-0 font-mono ${badge.className}`}
                         >
                           {badge.label}
                         </span>
                       </div>
 
                       {/* Observation */}
-                      <p className="text-xs text-slate-300 leading-relaxed mb-3">
+                      <p className="text-xs text-zinc-300 leading-relaxed mb-3">
                         {dim.observation}
                       </p>
 
                       {/* Actionable Advice */}
-                      <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/80">
-                        <span className="text-[10px] uppercase tracking-wider text-teal-400 font-bold block mb-1">
+                      <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold block mb-1">
                           Actionable Improvement
                         </span>
-                        <p className="text-xs text-slate-300 leading-relaxed">
+                        <p className="text-xs text-zinc-300 leading-relaxed">
                           {dim.actionableImprovement}
                         </p>
                       </div>
@@ -765,8 +765,8 @@ export function SessionSummary() {
 
                     {/* Verbatim Evidence Chips */}
                     {dim.evidence && dim.evidence.length > 0 ? (
-                      <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">
+                      <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                        <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold block">
                           Verified Verbatim Evidence ({dim.evidence.length})
                         </span>
                         <div className="space-y-1.5">
@@ -774,22 +774,22 @@ export function SessionSummary() {
                             <button
                               key={`ev-${dim.id}-${ev.turnId}-${evIdx}`}
                               onClick={() => scrollToTurn(ev.turnId)}
-                              className="w-full text-left p-2.5 rounded-lg bg-teal-950/20 hover:bg-teal-950/40 border border-teal-500/20 hover:border-teal-500/40 transition group"
+                              className="w-full text-left p-2.5 rounded-lg bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition group"
                               title="Click to jump to this turn in the transcript"
                             >
-                              <div className="flex items-center justify-between text-[10px] text-teal-300 font-mono mb-1">
+                              <div className="flex items-center justify-between text-[10px] text-zinc-300 font-mono mb-1">
                                 <span className="font-semibold">
                                   {ev.speakerName || 'Candidate'} • Turn {ev.turnId}
                                 </span>
-                                <span className="flex items-center gap-1 text-slate-400 group-hover:text-teal-300 transition">
+                                <span className="flex items-center gap-1 text-zinc-400 group-hover:text-zinc-200 transition">
                                   {formatRelativeTime(ev.relativeTimestampMs)}
                                   <ExternalLink className="w-2.5 h-2.5" />
                                 </span>
                               </div>
-                              <p className="text-xs text-slate-200 italic line-clamp-2">
+                              <p className="text-xs text-zinc-300 italic line-clamp-2">
                                 &ldquo;{ev.quote}&rdquo;
                               </p>
-                              <span className="text-[9px] text-teal-400 font-sans block mt-1 underline underline-offset-2">
+                              <span className="text-[9px] text-zinc-400 group-hover:text-zinc-200 font-sans block mt-1 underline underline-offset-2">
                                 View in transcript
                               </span>
                             </button>
@@ -797,7 +797,7 @@ export function SessionSummary() {
                         </div>
                       </div>
                     ) : (
-                      <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 italic">
+                      <div className="pt-2 border-t border-zinc-800/80 text-[11px] text-zinc-500 italic">
                         {dim.rating === 'Not observed'
                           ? 'No candidate opportunity or contribution was recorded for this dimension.'
                           : 'No verbatim quote cited for this observation.'}
@@ -811,50 +811,50 @@ export function SessionSummary() {
 
           {/* Differentiator: "What you could have said" Card */}
           {report?.alternativeOpportunity && !isGeneratingReport && (
-            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-[#0f1b33] to-[#0c223a] border border-sky-500/30 space-y-3">
+            <div className="p-5 sm:p-6 rounded-2xl bg-[#141417] border border-[#27272a] space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-zinc-300" />
                   </div>
                   <div>
                     <h3 className="font-bold text-sm text-white">
                       What You Could Have Said (Strategic Alternative)
                     </h3>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-zinc-400">
                       Concrete conversational pivot opportunity identified from peer exchanges.
                     </p>
                   </div>
                 </div>
 
-                <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold">
+                <span className="text-[10px] font-mono uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-300 border border-zinc-800 font-medium">
                   Objective: {report.alternativeOpportunity.objective}
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-2">
+              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-300 space-y-2">
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400 font-mono">
+                  <span className="text-zinc-400 font-mono">
                     Context: In response to{' '}
-                    <strong className="text-slate-200">
+                    <strong className="text-zinc-200">
                       {report.alternativeOpportunity.speakerName}
                     </strong>
                   </span>
                   <button
                     onClick={() => scrollToTurn(report.alternativeOpportunity!.targetTurnId)}
-                    className="text-sky-400 hover:text-sky-300 font-medium flex items-center gap-1 text-[11px] underline underline-offset-2"
+                    className="text-zinc-300 hover:text-white font-medium flex items-center gap-1 text-[11px] underline underline-offset-2"
                   >
                     <span>View peer turn {report.alternativeOpportunity.targetTurnId}</span>
                     <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
 
-                <p className="text-slate-300 text-xs">
+                <p className="text-zinc-300 text-xs">
                   {report.alternativeOpportunity.opportunityContext}
                 </p>
 
-                <div className="p-3 rounded-lg bg-sky-950/40 border border-sky-500/30 text-sky-200 mt-2">
-                  <span className="text-[10px] text-sky-400 uppercase tracking-wider font-bold block mb-1">
+                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 mt-2">
+                  <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-bold block mb-1">
                     Suggested Response (Model Alternative)
                   </span>
                   <p className="italic font-medium text-xs leading-relaxed">
@@ -863,35 +863,35 @@ export function SessionSummary() {
                 </div>
               </div>
 
-              <p className="text-[10px] text-slate-400 italic">
+              <p className="text-[10px] text-zinc-500 italic">
                 *Note: This is an AI-suggested alternative phrase for practice, not something you actually said in the discussion.
               </p>
             </div>
           )}
 
           {/* Coaching Disclaimer */}
-          <p className="text-[11px] text-slate-400 text-center italic py-1">
+          <p className="text-[11px] text-zinc-500 text-center italic py-1">
             {report?.disclaimer ||
               'AI-generated practice coaching based strictly on observable behaviours in this session; not an official placement assessment.'}
           </p>
         </section>
 
         {/* Full Transcript Review Accordion / List */}
-        <section className="p-5 sm:p-6 rounded-2xl bg-[#0d1527] border border-slate-800 space-y-3">
+        <section className="p-5 sm:p-6 rounded-2xl bg-[#141417] border border-[#27272a] space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                <FileText className="w-4 h-4 text-teal-400" />
+                <FileText className="w-4 h-4 text-zinc-300" />
                 Full Transcript Review ({totalTurns} Turns)
               </h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
+              <p className="text-[11px] text-zinc-500 mt-0.5">
                 Target turns referenced in the report above can be highlighted directly below.
               </p>
             </div>
 
             <button
               onClick={handleDownloadTranscript}
-              className="text-xs text-teal-400 hover:text-teal-300 font-medium underline underline-offset-2 flex items-center gap-1"
+              className="text-xs text-zinc-400 hover:text-zinc-200 font-medium underline underline-offset-2 flex items-center gap-1"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Save .txt</span>
@@ -927,41 +927,41 @@ export function SessionSummary() {
                         {turn.speakerName}
                       </span>
                       {isStudent && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30 font-medium">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-200 border border-zinc-700 font-medium">
                           You
                         </span>
                       )}
                       {isModerator && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium">
                           Moderator
                         </span>
                       )}
                       {turn.source === 'model' && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono">
                           Gemini AI
                         </span>
                       )}
                       {turn.source === 'scripted-demo' && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-800 font-mono">
                           Demo response
                         </span>
                       )}
                       {isInterrupted && (
-                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 border border-amber-600/50 flex items-center gap-1 font-mono">
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#1f1a14] text-amber-300 border border-amber-800/60 flex items-center gap-1 font-mono">
                           <ShieldAlert className="w-2.5 h-2.5 text-amber-400" /> Interrupted by candidate
                         </span>
                       )}
-                      <span className="text-[10px] font-mono text-slate-500">
+                      <span className="text-[10px] font-mono text-zinc-500">
                         ID: {turn.id}
                       </span>
                     </div>
 
-                    <span className="text-[10px] font-mono text-slate-400">
+                    <span className="text-[10px] font-mono text-zinc-500">
                       {formatRelativeTime(turn.relativeTimestampMs)}
                     </span>
                   </div>
 
-                  <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
+                  <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed">
                     {isInterrupted && turn.deliveredText ? turn.deliveredText : turn.text}
                   </p>
                 </div>
@@ -972,8 +972,8 @@ export function SessionSummary() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/80 py-4 px-4 sm:px-6 text-center text-xs text-slate-400">
-        GD Arena • Phase 4 Complete • Evidence-Backed Discussion Coaching & Verbatim Citations
+      <footer className="border-t border-[#27272a] py-4 px-4 sm:px-6 text-center text-xs text-zinc-500">
+        GD Arena • Evidence-Backed Discussion Coaching & Verbatim Citations
       </footer>
     </div>
   );

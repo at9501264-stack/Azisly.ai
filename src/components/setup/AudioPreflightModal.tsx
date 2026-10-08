@@ -179,68 +179,68 @@ export function AudioPreflightModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0b1222] border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col text-slate-100">
+      <div className="bg-[#141417] border border-[#27272a] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col text-zinc-100">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-800/80 bg-slate-900/50 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[#27272a] bg-[#101013] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-teal-400">
-              <Mic className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-200">
+              <Mic className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg text-white">Audio & Voice Preflight</h3>
-              <p className="text-xs text-slate-400">Verify your microphone and speakers before practice</p>
+              <h3 className="font-semibold text-base text-white">Audio & Voice Preflight</h3>
+              <p className="text-xs text-zinc-400">Verify your microphone and speakers before practice</p>
             </div>
           </div>
           <button
             onClick={handleCancelModal}
-            className="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
+            className="text-zinc-400 hover:text-white text-xs px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition cursor-pointer"
           >
             Cancel
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-4">
           {/* Disclosure Card */}
-          <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-300 space-y-2">
-            <div className="flex items-center gap-2 text-teal-300 font-medium">
-              <ShieldCheck className="w-4 h-4 text-teal-400 shrink-0" />
+          <div className="p-3.5 rounded-xl bg-[#101013] border border-[#27272a] text-xs text-zinc-300 space-y-2">
+            <div className="flex items-center gap-2 text-zinc-200 font-medium">
+              <ShieldCheck className="w-4 h-4 text-zinc-300 shrink-0" />
               <span>Voice Processing Disclosure</span>
             </div>
-            <p className="text-slate-400 leading-relaxed">
+            <p className="text-zinc-400 leading-relaxed">
               Your audio will be streamed in real-time to speech recognition services for live transcription.
               No raw audio recordings are permanently stored or shared.
             </p>
-            <div className="flex items-center gap-2 text-amber-300/90 pt-1 border-t border-slate-800/80">
-              <Headphones className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <div className="flex items-center gap-2 text-zinc-400 pt-1 border-t border-[#27272a]">
+              <Headphones className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
               <span>Recommended: Wear headphones to prevent AI voice loopback.</span>
             </div>
           </div>
 
           {/* Microphone Test Area */}
-          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-4">
+          <div className="p-4 rounded-xl bg-[#101013] border border-[#27272a] space-y-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-slate-200 flex items-center gap-2">
+              <div className="text-sm font-medium text-zinc-200 flex items-center gap-2">
                 {permissionState === 'granted' ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 ) : (
-                  <MicOff className="w-4 h-4 text-slate-400" />
+                  <MicOff className="w-4 h-4 text-zinc-400" />
                 )}
                 <span>Microphone Status</span>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+              <span className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
                 {permissionState === 'granted' ? 'Connected' : permissionState}
               </span>
             </div>
 
             {permissionState === 'prompt' && (
               <div className="text-center py-4 space-y-3">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-zinc-400">
                   Click below to grant temporary microphone access.
                 </p>
                 <button
                   onClick={requestMicrophoneAccess}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-teal-900/30 transition flex items-center gap-2 mx-auto"
+                  className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs rounded-xl shadow-sm transition flex items-center gap-2 mx-auto cursor-pointer"
                 >
                   <Mic className="w-4 h-4" />
                   Grant & Test Microphone
@@ -249,46 +249,40 @@ export function AudioPreflightModal({
             )}
 
             {permissionState === 'requesting' && (
-              <div className="text-center py-4 text-xs text-teal-400 animate-pulse">
+              <div className="text-center py-4 text-xs text-zinc-300 animate-pulse">
                 Requesting microphone permission from browser...
               </div>
             )}
 
             {permissionState === 'granted' && (
               <div className="space-y-3">
-                <div className="text-xs text-slate-400 truncate">
-                  Device: <span className="text-slate-200">{deviceName}</span>
+                <div className="text-xs text-zinc-400 truncate">
+                  Device: <span className="text-zinc-200">{deviceName}</span>
                 </div>
 
                 {/* Live VU Volume Meter */}
                 <div className="space-y-1.5">
-                  <div className="flex justify-between text-[11px] text-slate-400">
+                  <div className="flex justify-between text-[11px] text-zinc-400">
                     <span>Input Level (Speak to test)</span>
                     <span className="font-mono">{volumeLevel}%</span>
                   </div>
-                  <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                  <div className="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden p-0.5 border border-zinc-800">
                     <div
-                      className={`h-full rounded-full transition-all duration-75 ${
-                        volumeLevel > 70
-                          ? 'bg-rose-500'
-                          : volumeLevel > 20
-                          ? 'bg-teal-400'
-                          : 'bg-emerald-500/60'
-                      }`}
+                      className="h-full rounded-full transition-all duration-75 bg-zinc-200"
                       style={{ width: `${Math.max(4, volumeLevel)}%` }}
                     />
                   </div>
                 </div>
 
                 {/* Speaker Audio Test */}
-                <div className="pt-2 flex items-center justify-between border-t border-slate-900 text-xs">
-                  <span className="text-slate-400">Browser Audio Output</span>
+                <div className="pt-2 flex items-center justify-between border-t border-zinc-800 text-xs">
+                  <span className="text-zinc-400">Browser Audio Output</span>
                   <button
                     onClick={handleTestTone}
                     disabled={isTestTonePlaying}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-lg transition cursor-pointer"
                   >
-                    <Volume2 className="w-3.5 h-3.5 text-teal-400" />
+                    <Volume2 className="w-3.5 h-3.5 text-zinc-300" />
                     <span>{isTestTonePlaying ? 'Playing chime...' : 'Play Test Tone'}</span>
                   </button>
                 </div>
@@ -296,7 +290,7 @@ export function AudioPreflightModal({
             )}
 
             {(permissionState === 'denied' || permissionState === 'error' || permissionState === 'unsupported') && (
-              <div className="p-3 bg-rose-950/40 border border-rose-900/60 rounded-xl text-xs text-rose-300 space-y-2">
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-300 space-y-2">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                   <span>{errorMessage || 'Microphone error occurred.'}</span>
@@ -304,7 +298,7 @@ export function AudioPreflightModal({
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={requestMicrophoneAccess}
-                    className="px-2.5 py-1 bg-rose-900/60 hover:bg-rose-900 text-rose-100 rounded-lg transition"
+                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-lg transition cursor-pointer"
                   >
                     Retry Permission
                   </button>
@@ -313,7 +307,7 @@ export function AudioPreflightModal({
                       cleanupAudio();
                       onSwitchToTextMode();
                     }}
-                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition"
+                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition cursor-pointer"
                   >
                     Switch to Text Mode
                   </button>
@@ -324,13 +318,13 @@ export function AudioPreflightModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-slate-900/40 border-t border-slate-800/80 flex items-center justify-between">
+        <div className="px-6 py-4 bg-[#101013] border-t border-[#27272a] flex items-center justify-between">
           <button
             onClick={() => {
               cleanupAudio();
               onSwitchToTextMode();
             }}
-            className="text-xs text-slate-400 hover:text-slate-200 underline underline-offset-4"
+            className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-4 cursor-pointer"
           >
             Continue in Text Mode instead
           </button>
@@ -341,11 +335,11 @@ export function AudioPreflightModal({
               onConfirmVoiceMode();
             }}
             disabled={permissionState !== 'granted'}
-            className="px-5 py-2.5 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:hover:bg-teal-600 text-white font-medium text-sm rounded-xl shadow-lg shadow-teal-900/30 transition flex items-center gap-2"
+            className="px-4 py-2 bg-zinc-100 hover:bg-white disabled:opacity-40 text-zinc-950 font-semibold text-xs rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5" />
             <span>Enter Discussion Room</span>
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

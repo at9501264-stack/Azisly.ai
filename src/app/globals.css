@@ -2,15 +2,17 @@
 
 @layer base {
   :root {
-    --background: #080d1a;
-    --surface: #0e172a;
-    --surface-elevated: #162038;
-    --border-subtle: #1e293b;
-    --border-accent: #14b8a6;
-    --foreground: #f1f5f9;
-    --foreground-muted: #94a3b8;
-    --teal-primary: #14b8a6;
-    --teal-glow: rgba(20, 184, 166, 0.25);
+    --background: #0c0c0e;
+    --surface: #141417;
+    --surface-elevated: #18181c;
+    --surface-hover: #1e1e24;
+    --border-subtle: #27272a;
+    --border-hover: #3f3f46;
+    --foreground: #fafafa;
+    --foreground-muted: #a1a1aa;
+    --foreground-subtle: #71717a;
+    --primary: #f4f4f5;
+    --primary-foreground: #09090b;
   }
 
   body {
@@ -22,28 +24,28 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Custom subtle scrollbars */
+  /* Custom sleek studio scrollbars */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #0b1120;
+    background: #0c0c0e;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #1e293b;
+    background: #27272a;
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #334155;
+    background: #3f3f46;
   }
 
   /* Keyboard focus states */
   *:focus-visible {
-    outline: 2px solid #14b8a6;
+    outline: 2px solid #71717a;
     outline-offset: 2px;
   }
 }

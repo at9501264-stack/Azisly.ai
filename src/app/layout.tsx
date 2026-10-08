@@ -32,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} dark`}>
-      <body className="min-h-screen bg-[#080d1a] text-slate-100 flex flex-col antialiased">
+      <body className="min-h-screen bg-[#0c0c0e] text-zinc-100 flex flex-col antialiased selection:bg-zinc-800 selection:text-white">
         <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
