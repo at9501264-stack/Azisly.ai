@@ -8,16 +8,16 @@
 [![Next.js 16](https://img.shields.io/badge/Next.js-16.4.0-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React 19](https://img.shields.io/badge/React-19.0-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Groq Ultra-Fast LLM](https://img.shields.io/badge/LLM%20Primary-Groq%20Qwen%2027B-f97316?style=for-the-badge&logo=fastapi&logoColor=white)](https://groq.com/)
-[![Google Gemini Fallback](https://img.shields.io/badge/LLM%20Fallback-Gemini%203.5-4285f4?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com/)
+[![Google Gemini Fallback](https://img.shields.io/badge/LLM%20Fallback-Gemini%202.5%20%2F%203.5-4285f4?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com/)
 [![Sarvam AI](https://img.shields.io/badge/Audio%20AI-Sarvam%20Bulbul%20%2B%20Saaras-6366f1?style=for-the-badge)](https://www.sarvam.ai/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 <p align="center">
-  <b>Practice realistic Group Discussions with autonomous AI candidates and an academic moderator in real-time spoken Hindi-English (Hinglish) & English.</b><br/>
-  Features sub-300ms LLM turnaround, native Web Audio buffer streaming, zero-latency barge-in interruptions, and a verifiable competency scorecard with zero-hallucinated quotes.
+  <b>Practice authentic campus-placement group discussions with autonomous AI candidates and an academic moderator in real-time spoken Hindi-English (Hinglish) & English.</b><br/>
+  Features sub-300ms conversational turnaround, native Web Audio buffer streaming, instant Spacebar barge-in interruptions, and a verifiable competency scorecard with zero-hallucinated quotes.
 </p>
 
-[**🚀 Explore Live Production Arena**](https://gdarena-liard.vercel.app) • [**🎥 Watch Demo Walkthrough**](#-animated-session-walkthrough) • [**🏛️ System Architecture**](#-system-architecture--technical-deep-dive) • [**🛠️ Local Setup**](#-quick-start--local-development)
+[**🚀 Explore Live Production Arena**](https://gdarena-liard.vercel.app) • [**🎥 Watch Demo Walkthrough**](#-animated-session-walkthrough) • [**🧠 AI Models Deep Dive**](#-ai-models--architecture-breakdown) • [**🏛️ System Architecture**](#-system-architecture--technical-deep-dive) • [**🛠️ Local Setup**](#-quick-start--local-development)
 
 ---
 
@@ -57,6 +57,22 @@ Experience the authentic campus placement discussion room from configuration to 
 
 ---
 
+## 🧠 AI Models & Architecture Breakdown
+
+GD Arena combines best-in-class specialized models across LLM inference, acoustic speech synthesis, and real-time streaming speech-to-text to deliver conversational turn-taking with zero dead-air.
+
+| Component | Provider / Technology | Model Identifier | Primary Responsibility & Role | Why This Model Was Chosen |
+|---|---|---|---|---|
+| **Primary Conversational LLM** | **Groq Cloud** | `qwen/qwen3.8-27b` | Turn-by-turn conversational debate responses in structured JSON format. | **Blazing speed (~250ms–310ms latency)**. Group discussions feel artificial if debaters pause for 6-10 seconds. Qwen 27B on Groq LPU delivers instantaneous replies with sharp logical counter-arguments. |
+| **Failover Conversational LLM** | **Google Gemini** | `gemini-3.5-flash-lite` / `gemini-2.5-flash` | Automatic failover when Groq hits rate limits or network hiccups. | High resilience, reliable multi-turn schema adherence, and zero downtime assurance. |
+| **Qualitative Report & Coach** | **Google Gemini** | `gemini-2.5-flash` | Post-session analysis across 6 placement GD dimensions and deterministic quote citations. | Deep contextual reasoning over full session history (1000+ tokens) with evidence quote citation capabilities. |
+| **Indian Spoken Voice (TTS)** | **Sarvam AI** | `bulbul:v3` | High-fidelity neural voice synthesis for Indian English and natural Hinglish code-switching. | Native Indian accents and collegiate tonal cadence matching individual persona archetypes (`ratan`, `aditya`, `ishita`, `kabir`, `kavya`, `dev`). |
+| **Realtime Speech-to-Text (STT)** | **Sarvam AI** | `saaras:v4` via WebSocket | Continuous real-time transcription of candidate speech streamed as 16kHz Linear16 PCM. | State-of-the-art accuracy for Indian names, technical collegiate terminology, and mixed Hindi-English phrasing. |
+| **Audio Playback Engine** | **Web Audio API** | Native Browser AudioContext | Decodes raw MP3 buffers into memory and routes audio to hardware output. | Completely eliminates browser autoplay blocks and enables instant (<10ms) Spacebar barge-in interruptions. |
+| **Offline Fallback Engine** | **Deterministic Scripted Engine** | Built-in TypeScript State Machine | Fallback dialogue and browser `webkitSpeechRecognition` / `SpeechSynthesis`. | Guarantees the application **never crashes or blocks the user** even if API keys are absent or offline. |
+
+---
+
 ## 🏛️ System Architecture & Technical Deep Dive
 
 GD Arena is built on an event-driven, decoupled architecture designed for sub-second conversational latency and acoustic reliability.
@@ -77,7 +93,7 @@ flowchart TB
     subgraph LLMCluster["Conversational Reasoning Cluster"]
         direction TB
         Groq["Primary LLM: Groq API\n(qwen/qwen3.8-27b)\n⚡ Latency: ~250ms"]
-        Gemini["Fallback LLM: Google Gemini\n(gemini-3.5-flash-lite)\n⚡ Latency: ~1.2s"]
+        Gemini["Fallback LLM: Google Gemini\n(gemini-2.5-flash / gemini-3.5)\n⚡ Latency: ~1.2s"]
     end
 
     subgraph SpeechServices["Sarvam AI Voice Services"]
@@ -165,11 +181,11 @@ Each AI peer is engineered with a strict psychological archetype, debate posture
 | **Kabir** | Peer Debater | **Thoughtful & Ethical**. Speaks selectively, raises long-term social, legal, and ethical consequences. | `kabir` | `0.92x` / `0.92` | `Indigo` (`#6366f1`) |
 | **Riya** | Peer Debater | **Creative & Tangential**. Shares relatable real-world anecdotes, consumer perspectives, and startup parallels. | `kavya` | `1.06x` / `1.08` | `Rose` (`#f43f5e`) |
 | **Dev** | Peer Debater | **Diplomatic Synthesizer**. Unifies conflicting opinions, highlights consensus, and proposes balanced solutions. | `dev` | `1.00x` / `0.98` | `Purple` (`#a855f7`) |
-| **You** | Candidate | **Practice Candidate**. Active microphone participant. Live transcription, barge-in privilege, and comprehensive scorecard. | Client Mic | Native | `Teal` (`#14b8a6`) |
+| **You** | Candidate | **Practice Candidate**. Active microphone participant. Live transcription, barge-in privilege, and comprehensive scorecard. | Client Mic / Text | Native | `Teal` (`#14b8a6`) |
 
 ---
 
-## ⚡ Core Technical Innovations
+## ⚡ Core Engineering Highlights
 
 ### 1. Ultra-Low Latency Conversational Turnaround (<1.5s End-to-End)
 - **Primary LLM**: Powered by Groq's `qwen/qwen3.8-27b`, returning structured conversational JSON in **220ms – 310ms** (a 40x speedup over standard 70B/120B reasoning models).
@@ -205,26 +221,30 @@ Below is a representative transcript snippet demonstrating how GD Arena coordina
 
 ```markdown
 [00:01] 👨‍🏫 Prof. Sharma (Moderator) [Voice: ratan]
-"Welcome everyone to today's group discussion on 'Should AI replace human managers?' 
-Let's maintain a respectful, evidence-based dialogue. The floor is now open for initial thoughts."
+"Welcome everyone to today's group discussion on 'Is AI going to eliminate entry-level software engineering jobs?' 
+Please maintain academic rigor, listen actively, and respect differing viewpoints. The floor is open."
 
-[00:15] 🧑‍🎓 You (Candidate) [Spoken via Mic]
-"Good morning everyone. I believe AI can handle logistical tasks like scheduling and workflow tracking, 
-but human managers are indispensable for empathy, conflict resolution, and mentorship."
+[00:18] 🧑‍🎓 You (Candidate) [Spoken via Mic / Text Input]
+"Good morning everyone. In my view, while generative coding assistants automate syntax generation 
+and repetitive boilerplate, entry-level engineers are vital for domain-specific problem formulation, 
+edge-case testing, and understanding user nuances that models frequently hallucinate."
 
-[00:32] ⚡ Aarav (Assertive) [Voice: aditya]
-"I see your point about empathy, Candidate, but let's be realistic: human managers often introduce 
-cognitive bias and favoritism in promotions. An algorithmic manager evaluated purely on metrics is objectively fairer."
+[00:45] ⚡ Aarav (Assertive) [Voice: aditya]
+"I see your perspective Candidate, but we must acknowledge enterprise economics. Research shows GitHub Copilot 
+and automated agents already generate 46% of production code. When senior developers paired with AI 
+operate at 3x velocity, why would tech firms spend 9 months training fresh graduates?"
 
-[00:54] 📊 Meera (Analytical) [Voice: ishita]
-"Building on Aarav's point, a recent survey showed 64% of employees trust AI advice more than their managers. 
-However, Candidate's point on ethical accountability is critical when unexpected crises hit."
+[01:18] 📊 Meera (Analytical) [Voice: ishita]
+"Aarav makes a compelling short-term efficiency point, but we have to analyze technical debt. Recent studies 
+from GitClear show code duplication and refactoring debt jump by 32% with unchecked AI generation. 
+If we eliminate entry-level roles, where will senior architects come from in ten years?"
 
-[01:12] 🧑‍🎓 You (Candidate) [Pressed Spacebar - Barge-in Interruption]
-"Excuse me Meera, but trusting an algorithm with metrics is very different from trusting it during a layoff or crisis!"
+[01:38] 🧑‍🎓 You (Candidate) [Pressed Spacebar - Barge-in Interruption]
+"Exactly Meera! Furthermore, senior architects can't maintain millions of lines of auto-generated code 
+without fresh engineers thoroughly testing the domain logic."
 
-[01:25] 👨‍🏫 Prof. Sharma (Moderator) [Voice: ratan]
-"A compelling counter from the candidate. Kabir, how do you see the ethical dilemma here?"
+[01:55] 👨‍🏫 Prof. Sharma (Moderator) [Voice: ratan]
+"A well-timed interjection by the candidate that connects architecture with team longevity. Kabir, what are your thoughts?"
 ```
 
 ---
@@ -257,8 +277,8 @@ GROQ_MODEL=qwen/qwen3.8-27b
 
 # Fallback Conversational LLM: Google Gemini
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-3.5-flash-lite
-REPORT_MODEL=gemini-3.5-flash-lite
+GEMINI_MODEL=gemini-2.5-flash
+REPORT_MODEL=gemini-2.5-flash
 
 # Sarvam AI Voice Engine (bulbul:v3 TTS & saaras:v4 STT)
 SARVAM_API_KEY=sk_your_sarvam_api_key_here
