@@ -79,21 +79,21 @@ const DEFAULT_CONFIG: RoomConfig = {
 };
 
 function getTurnPauseMs(patience: AIPatience): number {
-  if (patience === 'quick') return 1800;
-  if (patience === 'patient') return 4000;
-  return 2800;
+  if (patience === 'quick') return 350;
+  if (patience === 'patient') return 900;
+  return 500;
 }
 
 function getStudentOpportunityPauseMs(patience: AIPatience): number {
-  if (patience === 'quick') return 4500;
-  if (patience === 'patient') return 8500;
-  return 6500;
+  if (patience === 'quick') return 3000;
+  if (patience === 'patient') return 5500;
+  return 4000;
 }
 
 function getStudentPauseMs(patience: AIPatience): number {
-  if (patience === 'quick') return 1600;
-  if (patience === 'patient') return 3400;
-  return 2400;
+  if (patience === 'quick') return 200;
+  if (patience === 'patient') return 500;
+  return 300;
 }
 
 let eventSeq = 0;
@@ -961,19 +961,19 @@ export function SessionProvider({
         ]
       }));
 
-      // Candidate remains highlighted briefly before AI responds
+      // Trigger next AI peer response with natural, low-latency conversational cadence
+      const pauseBetween = getStudentPauseMs(current.config.patience);
       activeTimerRef.current = setTimeout(() => {
         if (generationRef.current !== genId) return;
 
         setState((prev) => ({
           ...prev,
           activeSpeakerId: null,
-          voiceFlowState: 'listening'
+          voiceFlowState: 'thinking'
         }));
 
-        const pauseBetween = getStudentPauseMs(current.config.patience);
-        scheduleNextTurn(genId, pauseBetween);
-      }, 1600);
+        scheduleNextTurn(genId, 50);
+      }, pauseBetween);
     },
     [bumpGeneration, scheduleNextTurn]
   );
@@ -1174,6 +1174,9 @@ export function SessionProvider({
         isAudioBlocked: false,
         isMicMuted: false
       });
+
+      // Schedule opening turn immediately to eliminate awkward startup wait
+      scheduleNextTurnRef.current(genId, 200);
     },
     [bumpGeneration]
   );

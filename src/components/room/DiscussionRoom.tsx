@@ -62,6 +62,10 @@ export function DiscussionRoom() {
       ? state.participants.find((p) => p.id === state.activeSpeakerId) || null
       : null;
 
+  const generatingSpeaker = state.generatingSpeakerId
+    ? state.participants.find((p) => p.id === state.generatingSpeakerId) || null
+    : null;
+
   const handleSendMessage = (e?: React.SyntheticEvent) => {
     if (e) e.preventDefault();
     if (!composerText.trim()) return;
@@ -408,6 +412,9 @@ export function DiscussionRoom() {
               participants={state.participants}
               activeSpeakerId={state.activeSpeakerId}
               isVisible={state.isCaptionsVisible}
+              liveCaption={state.liveCaption}
+              isGenerating={state.isGenerating}
+              generatingSpeakerName={generatingSpeaker?.name || null}
             />
           </div>
 

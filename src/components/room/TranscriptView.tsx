@@ -9,6 +9,9 @@ interface TranscriptViewProps {
   readonly participants: Participant[];
   readonly activeSpeakerId: string | null;
   readonly isVisible: boolean;
+  readonly liveCaption?: string;
+  readonly isGenerating?: boolean;
+  readonly generatingSpeakerName?: string | null;
 }
 
 function getTurnCardStyle(role: ParticipantRole, isInterrupted?: boolean): string {
@@ -27,17 +30,20 @@ function getSpeakerNameColor(role: ParticipantRole): string {
 export function TranscriptView({
   transcript,
   activeSpeakerId,
-  isVisible
+  isVisible,
+  liveCaption,
+  isGenerating,
+  generatingSpeakerName
 }: Readonly<TranscriptViewProps>) {
   const scrollEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new turns
+  // Auto-scroll to bottom on new turns or live speech
   useEffect(() => {
     if (isVisible && scrollEndRef.current) {
       scrollEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [transcript.length, isVisible, activeSpeakerId]);
+  }, [transcript.length, isVisible, activeSpeakerId, liveCaption, isGenerating]);
 
   if (!isVisible) {
     return (
@@ -75,14 +81,14 @@ export function TranscriptView({
 
       {/* Transcript Message List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
-        {transcript.length === 0 ? (
+        {transcript.length === 0 && !liveCaption ? (
           <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center p-6 text-zinc-400">
             <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-2 text-zinc-400">
               <Bot className="w-5 h-5 text-zinc-400" />
             </div>
             <p className="text-sm font-medium text-zinc-300">Awaiting opening address...</p>
             <p className="text-xs text-zinc-500 mt-1 max-w-xs">
-              Prof. Sharma will open the session shortly. You can enter your thoughts anytime using your voice or keyboard.
+              Prof. Sharma will open the session shortly. You can also start the discussion yourself anytime using your voice or keyboard.
             </p>
           </div>
         ) : (
@@ -151,6 +157,36 @@ export function TranscriptView({
             );
           })
         )}
+
+        {/* Live speech feedback right inside transcript */}
+        {Boolean(liveCaption) && (
+          <div className="p-3.5 rounded-xl border border-zinc-700 bg-[#16161c] ml-2 animate-pulse">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white font-semibold">You (Candidate)</span>
+                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded border uppercase tracking-wider bg-zinc-800 text-zinc-200 border-zinc-700">
+                  Transcribing Live
+                </span>
+              </div>
+              <span className="text-[10px] text-zinc-400 font-mono flex items-center gap-1">
+                <Volume2 className="w-3 h-3 animate-pulse text-zinc-300" />
+                Live
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-zinc-100 italic leading-relaxed font-sans">
+              &ldquo;{liveCaption}&rdquo;
+            </p>
+          </div>
+        )}
+
+        {/* Peer formulating response indicator */}
+        {Boolean(isGenerating) && (
+          <div className="p-3 rounded-xl border border-zinc-800/80 bg-[#121215] text-xs text-zinc-400 flex items-center gap-2 animate-pulse">
+            <div className="w-2 h-2 rounded-full bg-zinc-400 animate-ping" />
+            <span>{generatingSpeakerName || 'Next Speaker'} is preparing to respond...</span>
+          </div>
+        )}
+
         <div ref={scrollEndRef} />
       </div>
     </div>

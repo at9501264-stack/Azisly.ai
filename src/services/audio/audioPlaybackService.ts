@@ -60,6 +60,8 @@ class AudioPlaybackService {
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
       }
+      const dummyAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+      await dummyAudio.play().catch(() => {});
       this.isUnlocked = true;
       return true;
     } catch {
@@ -87,10 +89,7 @@ class AudioPlaybackService {
         const binaryString = atob(request.audioBase64);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        const blob = new Blob([bytes.buffer], { type: 'audio/mp3' });
+        const blob = new Blob([bytes], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
         this.currentAudioUrl = url;
 
