@@ -27,8 +27,24 @@
 
 Experience the authentic campus placement discussion room from configuration to qualitative post-session coaching.
 
-### 🎥 Animated Session Walkthrough
+### 🎥 Full HD Walkthrough Video (74s Spoken Audio + Complete Feature Tour)
 
+<div align="center">
+
+https://github.com/user-attachments/assets/demo_walkthrough.mp4
+
+<video src="https://raw.githubusercontent.com/at9501264-stack/Azisly.ai/main/docs/assets/demo_walkthrough.mp4" controls width="100%" poster="docs/assets/discussion_arena.png">
+  <a href="https://raw.githubusercontent.com/at9501264-stack/Azisly.ai/main/docs/assets/demo_walkthrough.mp4">▶️ Watch 74s Full Walkthrough Video with Spoken Voices (1080p MP4)</a>
+</video>
+
+<p align="center">
+  <b><a href="https://raw.githubusercontent.com/at9501264-stack/Azisly.ai/main/docs/assets/demo_walkthrough.mp4">▶️ Click Here to Stream / Download 74s Master Walkthrough Video with Spoken Audio (1080p MP4)</a></b><br/>
+  <i>Includes 23s feature tour (topics, panel, preflight VU meter) + 40s live spoken debate (Prof. Sharma, candidate speech, Aarav counter, Meera synthesis) + 10s evaluation report.</i>
+</p>
+
+</div>
+
+#### 🎞️ Instant Quick-Preview Animation
 ![GD Arena Live Demo Animation](docs/assets/demo_video.webp)
 
 ---
