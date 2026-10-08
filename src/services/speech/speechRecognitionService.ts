@@ -147,7 +147,7 @@ export class SpeechRecognitionService {
         signal: AbortSignal.timeout(1200)
       }).catch(() => null);
 
-      if (!healthCheck || !healthCheck.ok) {
+      if (!healthCheck?.ok) {
         return false;
       }
 
@@ -210,7 +210,7 @@ export class SpeechRecognitionService {
       this.processor = processor;
 
       processor.onaudioprocess = (e) => {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (this.ws?.readyState !== WebSocket.OPEN) return;
 
         const inputData = e.inputBuffer.getChannelData(0);
         // Convert Float32 to 16-bit PCM Linear
@@ -222,25 +222,7 @@ export class SpeechRecognitionService {
           if (Math.abs(s) > maxAmp) maxAmp = Math.abs(s);
         }
 
-        // CRITICAL: When AI audio is playing through speakers, DO NOT trigger speech start
-        // solely based on raw microphone amplitude! Laptop speakers bleed directly into the mic,
-        // which previously caused the AI to immediately cut itself off after 1 word!
-        const isAiSpeaking = audioPlaybackService.getIsPlaying();
-
-        if (!isAiSpeaking) {
-          // Robust VAD: requires energy above 0.15 for at least 2 consecutive frames (~250ms)
-          // to reject keyboard taps, breathing, or gentle ambient room noise.
-          if (maxAmp > 0.15) {
-            this.consecutiveSpeechFrames++;
-            if (this.consecutiveSpeechFrames >= 2 && !this.isSpeaking) {
-              this.triggerSpeechStart();
-            }
-          } else {
-            this.consecutiveSpeechFrames = 0;
-          }
-        } else {
-          this.consecutiveSpeechFrames = 0;
-        }
+        this.processVadAmplitude(maxAmp);
 
         // Send base64-encoded PCM chunk
         const buffer = pcm16.buffer;
@@ -259,6 +241,7 @@ export class SpeechRecognitionService {
           })
         );
       };
+
 
       source.connect(processor);
       processor.connect(audioContext.destination);
@@ -411,6 +394,22 @@ export class SpeechRecognitionService {
     this.resetSilenceTimer();
   }
 
+  private processVadAmplitude(maxAmp: number) {
+    if (audioPlaybackService.getIsPlaying()) {
+      this.consecutiveSpeechFrames = 0;
+      return;
+    }
+
+    if (maxAmp > 0.15) {
+      this.consecutiveSpeechFrames++;
+      if (this.consecutiveSpeechFrames >= 2 && !this.isSpeaking) {
+        this.triggerSpeechStart();
+      }
+    } else {
+      this.consecutiveSpeechFrames = 0;
+    }
+  }
+
   private triggerSpeechStart() {
     if (!this.isSpeaking) {
       this.isSpeaking = true;
@@ -435,7 +434,7 @@ export class SpeechRecognitionService {
    * Evaluates whether a transcript segment is a hallucination or noise artifact.
    */
   private isHallucinationOrNoise(text: string): boolean {
-    const normalized = text.toLowerCase().trim().replace(/[.,!?;:]+$/g, '');
+    const normalized = text.toLowerCase().trim().replace(/[.,!?;:]+$/, '');
     if (SpeechRecognitionService.KNOWN_HALLUCINATIONS.has(normalized)) {
       return true;
     }
@@ -485,7 +484,6 @@ export class SpeechRecognitionService {
     this.commitTurnIfReady();
   }
 
-
   private stopAudioCapture() {
     if (this.processor) {
       try {
@@ -498,12 +496,13 @@ export class SpeechRecognitionService {
 
     if (this.audioContext) {
       try {
-        this.audioContext.close();
+        void this.audioContext.close().catch(() => {});
       } catch {
         // Ignore
       }
       this.audioContext = null;
     }
+
 
     if (this.mediaStream) {
       try {

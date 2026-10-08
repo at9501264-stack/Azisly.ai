@@ -47,6 +47,72 @@ function getSarvamKeyPool(): string[] {
   return Array.from(new Set(pool));
 }
 
+interface SynthesisOptions {
+  text: string;
+  language: 'en-IN' | 'hi-IN';
+  speaker: string;
+  pace: number;
+}
+
+interface SynthesisResult {
+  audioBase64?: string;
+  error?: string;
+  statusCode?: number;
+  fatal?: boolean;
+}
+
+async function requestSarvamAudio(apiKey: string, options: SynthesisOptions): Promise<SynthesisResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+      method: 'POST',
+      headers: {
+        'api-subscription-key': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: options.text,
+        model: 'bulbul:v3',
+        language_code: options.language,
+        speaker: options.speaker,
+        pace: options.pace,
+        output_audio_codec: 'mp3',
+        speech_sample_rate: 24000
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    if (response.ok) {
+      const data = await response.json();
+      const audioBase64 = data.audios?.[0];
+      if (!audioBase64) {
+        return { error: 'Sarvam TTS response did not contain audio data.', statusCode: 502 };
+      }
+      return { audioBase64 };
+    }
+
+    const errText = await response.text();
+    const isClientError = response.status === 400;
+    return {
+      error: `Sarvam TTS API returned error (${response.status}): ${errText}`,
+      statusCode: response.status >= 500 ? 502 : response.status,
+      fatal: isClientError
+    };
+  } catch (fetchErr: unknown) {
+    clearTimeout(timeout);
+    const isAbort = (fetchErr as { name?: string })?.name === 'AbortError';
+    const errMessage = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+    return {
+      error: isAbort ? 'Sarvam TTS request timed out after 12s.' : errMessage,
+      statusCode: 504
+    };
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'local-user';
@@ -85,73 +151,36 @@ export async function POST(req: NextRequest) {
     const targetLanguage = languageCode === 'hi-IN' ? 'hi-IN' : 'en-IN';
     const targetPace = typeof pace === 'number' && pace >= 0.5 && pace <= 2.0 ? pace : 1.0;
 
-    let lastError: string = 'Unknown error';
+    const synthOptions: SynthesisOptions = {
+      text: trimmedText,
+      speaker: targetSpeaker,
+      language: targetLanguage,
+      pace: targetPace
+    };
+
+    let lastError = 'Unknown error';
     let lastStatusCode = 502;
 
-    // Try keys from the pool in order (auto-failover on quota/rate limit)
-    for (let i = 0; i < keyPool.length; i++) {
-      const activeKey = keyPool[i];
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+    for (const activeKey of keyPool) {
+      const res = await requestSarvamAudio(activeKey, synthOptions);
+      if (res.audioBase64) {
+        const wordCount = trimmedText.split(/\s+/).length;
+        const durationEstimateMs = Math.round((wordCount / (150 * targetPace)) * 60 * 1000);
 
-      try {
-        const response = await fetch('https://api.sarvam.ai/text-to-speech', {
-          method: 'POST',
-          headers: {
-            'api-subscription-key': activeKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            text: trimmedText,
-            model: 'bulbul:v3',
-            language_code: targetLanguage,
-            speaker: targetSpeaker,
-            pace: targetPace,
-            output_audio_codec: 'mp3',
-            speech_sample_rate: 24000
-          }),
-          signal: controller.signal
+        return NextResponse.json({
+          audioBase64: res.audioBase64,
+          format: 'mp3',
+          speaker: targetSpeaker,
+          languageCode: targetLanguage,
+          durationEstimateMs: Math.max(durationEstimateMs, 1000)
         });
+      }
 
-        clearTimeout(timeout);
+      lastError = res.error || lastError;
+      lastStatusCode = res.statusCode || lastStatusCode;
 
-        if (response.ok) {
-          const data = await response.json();
-          const audioBase64 = data.audios?.[0];
-
-          if (!audioBase64) {
-            lastError = 'Sarvam TTS response did not contain audio data.';
-            continue;
-          }
-
-          // Word count rough duration estimate: ~150 words per minute
-          const wordCount = trimmedText.split(/\s+/).length;
-          const durationEstimateMs = Math.round((wordCount / (150 * targetPace)) * 60 * 1000);
-
-          return NextResponse.json({
-            audioBase64,
-            format: 'mp3',
-            speaker: targetSpeaker,
-            languageCode: targetLanguage,
-            durationEstimateMs: Math.max(durationEstimateMs, 1000)
-          });
-        }
-
-        const errText = await response.text();
-        console.warn(`[SarvamTTS] Key #${i + 1} failed (${response.status}): ${errText}`);
-        lastStatusCode = response.status >= 500 ? 502 : response.status;
-        lastError = `Sarvam TTS API returned error (${response.status}): ${errText}`;
-
-        // If client error is 400 (bad input like invalid text), do not retry other keys
-        if (response.status === 400) {
-          return NextResponse.json({ error: lastError, code: 'UPSTREAM_ERROR' }, { status: 400 });
-        }
-      } catch (fetchErr: unknown) {
-        clearTimeout(timeout);
-        const isAbort = (fetchErr as { name?: string })?.name === 'AbortError';
-        lastError = isAbort ? 'Sarvam TTS request timed out after 12s.' : String(fetchErr);
-        lastStatusCode = 504;
-        console.warn(`[SarvamTTS] Key #${i + 1} network error: ${lastError}`);
+      if (res.fatal) {
+        return NextResponse.json({ error: lastError, code: 'UPSTREAM_ERROR' }, { status: 400 });
       }
     }
 

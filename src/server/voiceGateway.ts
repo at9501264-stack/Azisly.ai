@@ -1,34 +1,34 @@
-import http from 'http';
+import http from 'node:http';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
-import url from 'url';
-import fs from 'fs';
-import path from 'path';
+import url from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
 
-// Load .env.local and .env into process.env if not already set
-function loadEnv() {
-  const envFiles = ['.env.local', '.env'];
-  for (const f of envFiles) {
-    const fullPath = path.resolve(process.cwd(), f);
-    if (fs.existsSync(fullPath)) {
-      try {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        for (const line of content.split('\n')) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith('#')) continue;
-          const eqIdx = trimmed.indexOf('=');
-          if (eqIdx !== -1) {
-            const key = trimmed.slice(0, eqIdx).trim();
-            const val = trimmed.slice(eqIdx + 1).trim();
-            if (!process.env[key]) {
-              process.env[key] = val;
-            }
-          }
+function parseEnvFile(filePath: string) {
+  if (!fs.existsSync(filePath)) return;
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx !== -1) {
+        const key = trimmed.slice(0, eqIdx).trim();
+        const val = trimmed.slice(eqIdx + 1).trim();
+        if (!process.env[key]) {
+          process.env[key] = val;
         }
-      } catch (err) {
-        console.warn(`[VoiceGW] Notice loading ${f}:`, err);
       }
     }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[VoiceGW] Notice loading ${filePath}:`, msg);
   }
+}
+
+function loadEnv() {
+  parseEnvFile(path.resolve(process.cwd(), '.env.local'));
+  parseEnvFile(path.resolve(process.cwd(), '.env'));
 }
 loadEnv();
 
@@ -47,7 +47,23 @@ function getSarvamKeyPool(): string[] {
   return Array.from(new Set(pool));
 }
 
-const PORT = parseInt(process.env.VOICE_GATEWAY_PORT || '3001', 10);
+function rawDataToString(data: RawData): string {
+  if (Buffer.isBuffer(data)) return data.toString('utf-8');
+  if (Array.isArray(data)) return Buffer.concat(data).toString('utf-8');
+  return Buffer.from(data).toString('utf-8');
+}
+
+function getRawDataByteLength(message: RawData): number {
+  if (Buffer.isBuffer(message)) {
+    return message.length;
+  }
+  if (Array.isArray(message)) {
+    return message.reduce((acc, b) => acc + b.length, 0);
+  }
+  return (message as ArrayBuffer).byteLength;
+}
+
+const PORT = Number.parseInt(process.env.VOICE_GATEWAY_PORT || '3001', 10);
 const MAX_MESSAGE_BYTES = 64 * 1024; // 64 KB per chunk
 const MAX_SESSION_DURATION_MS = 15 * 60 * 1000; // 15 minutes limit per connection
 
@@ -71,7 +87,9 @@ const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url || '', true);
   if (parsed.pathname === '/health') {
     const keyPool = getSarvamKeyPool();
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    const origin = req.headers.origin;
+    const allowOrigin = isOriginAllowed(origin) ? (origin || '*') : 'null';
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': allowOrigin });
     res.end(
       JSON.stringify({
         status: 'ok',
@@ -87,6 +105,7 @@ const server = http.createServer((req, res) => {
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not Found');
 });
+
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -186,8 +205,8 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
       });
 
       upstreamWs.on('message', (data: RawData) => {
+        const text = rawDataToString(data);
         try {
-          const text = data.toString('utf-8');
           const parsed = JSON.parse(text);
 
           // Normalize Sarvam realtime transcription events
@@ -212,7 +231,7 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
           }
         } catch {
           // Fallback pass-through if unparsed
-          clientWs.send(data.toString('utf-8'));
+          clientWs.send(text);
         }
       });
 
@@ -267,24 +286,20 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
 
   tryConnectUpstream(0);
 
-
   // Handle client messages (forwarding audio chunks)
   clientWs.on('message', (message: RawData) => {
-    const byteLength = Buffer.isBuffer(message)
-      ? message.length
-      : Array.isArray(message)
-      ? message.reduce((acc, b) => acc + b.length, 0)
-      : (message as ArrayBuffer).byteLength;
+    const byteLength = getRawDataByteLength(message);
 
     if (byteLength > MAX_MESSAGE_BYTES) {
       console.warn(`[VoiceGW] Discarded oversized message: ${byteLength} bytes`);
       return;
     }
 
-    if (upstreamWs && upstreamWs.readyState === WebSocket.OPEN) {
+    if (upstreamWs?.readyState === WebSocket.OPEN) {
       upstreamWs.send(message);
     }
   });
+
 
   const cleanup = () => {
     clearTimeout(sessionTimeout);
