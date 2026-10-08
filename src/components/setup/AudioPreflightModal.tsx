@@ -16,7 +16,7 @@ export function AudioPreflightModal({
   onClose,
   onConfirmVoiceMode,
   onSwitchToTextMode
-}: AudioPreflightModalProps) {
+}: Readonly<AudioPreflightModalProps>) {
   const [permissionState, setPermissionState] = useState<'prompt' | 'requesting' | 'granted' | 'denied' | 'error' | 'unsupported'>('prompt');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deviceName, setDeviceName] = useState<string>('Default Microphone');
@@ -38,11 +38,7 @@ export function AudioPreflightModal({
       streamRef.current = null;
     }
     if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close();
-      } catch {
-        // Ignore
-      }
+      audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
     setVolumeLevel(0);
@@ -92,8 +88,8 @@ export function AudioPreflightModal({
         if (!analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
         let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+        for (const val of dataArray) {
+          sum += val;
         }
         const avg = sum / dataArray.length;
         // Normalize to 0-100 range with sensitivity boost
@@ -346,17 +342,11 @@ export function AudioPreflightModal({
 
           <button
             onClick={async () => {
-              if (permissionState === 'granted') {
-                cleanupAudio();
-                onConfirmVoiceMode();
-              } else if (permissionState === 'prompt') {
+              if (permissionState === 'prompt') {
                 await requestMicrophoneAccess();
-                cleanupAudio();
-                onConfirmVoiceMode();
-              } else {
-                cleanupAudio();
-                onConfirmVoiceMode();
               }
+              cleanupAudio();
+              onConfirmVoiceMode();
             }}
             className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
           >

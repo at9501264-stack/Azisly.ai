@@ -481,6 +481,79 @@ export function SessionProvider({
 
   const scheduleNextTurnRef = useRef<(genId: number, delayMs: number) => void>(() => {});
 
+  const triggerStudentOpportunityWindow = useCallback(
+    (genId: number, patience: AIPatience, scheduleCallback: (g: number, d: number) => void) => {
+      setState((prev) => ({
+        ...prev,
+        awaitingStudentOpportunity: true,
+        activeSpeakerId: null,
+        voiceFlowState: 'listening',
+        isGenerating: false,
+        generatingSpeakerId: null
+      }));
+
+      const oppPause = getStudentOpportunityPauseMs(patience);
+      activeTimerRef.current = setTimeout(() => {
+        if (generationRef.current !== genId) return;
+        setState((prev) => ({
+          ...prev,
+          awaitingStudentOpportunity: false,
+          consecutiveAiTurns: 0
+        }));
+        scheduleCallback(genId, 1000);
+      }, oppPause);
+    },
+    []
+  );
+
+  const handleGenerationError = useCallback(
+    (err: unknown, genId: number, scheduleCallback: (g: number, d: number) => void) => {
+      const isUnconfigured = Boolean(
+        err && typeof err === 'object' && 'isUnconfigured' in err && (err as { isUnconfigured?: boolean }).isUnconfigured
+      );
+      const errMsg =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'string'
+          ? err
+          : 'Discussion generation error';
+
+      console.warn('[Discussion generation issue]:', errMsg);
+
+      if (isUnconfigured) {
+        setState((prev) => ({
+          ...prev,
+          engineMode: 'demo',
+          isGenerating: false,
+          generatingSpeakerId: null,
+          events: [
+            ...prev.events,
+            createSessionEvent('switched_to_demo', { reason: 'unconfigured_key' })
+          ]
+        }));
+        scheduleCallback(genId, 500);
+        return;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        isGenerating: false,
+        generatingSpeakerId: null,
+        activeSpeakerId: null,
+        voiceFlowState: 'error',
+        errorState: {
+          message: errMsg || 'Failed to generate discussion turn.',
+          retryable: true
+        },
+        events: [
+          ...prev.events,
+          createSessionEvent('ai_generation_failed', { error: errMsg })
+        ]
+      }));
+    },
+    []
+  );
+
   // Primary turn execution logic
   const executeNextTurn = useCallback(
     async (genId: number, scheduleCallback: (g: number, d: number) => void) => {
@@ -500,26 +573,7 @@ export function SessionProvider({
         shouldOfferStudentOpportunity(current.consecutiveAiTurns, current.phase) &&
         !current.awaitingStudentOpportunity
       ) {
-        setState((prev) => ({
-          ...prev,
-          awaitingStudentOpportunity: true,
-          activeSpeakerId: null,
-          voiceFlowState: 'listening',
-          isGenerating: false,
-          generatingSpeakerId: null
-        }));
-
-        // Give student a longer pause to jump in
-        const oppPause = getStudentOpportunityPauseMs(current.config.patience);
-        activeTimerRef.current = setTimeout(() => {
-          if (generationRef.current !== genId) return;
-          setState((prev) => ({
-            ...prev,
-            awaitingStudentOpportunity: false,
-            consecutiveAiTurns: 0 // Reset counter after student window expires
-          }));
-          scheduleCallback(genId, 1000);
-        }, oppPause);
+        triggerStudentOpportunityWindow(genId, current.config.patience, scheduleCallback);
         return;
       }
 
@@ -575,46 +629,7 @@ export function SessionProvider({
           return;
         }
 
-        const isUnconfigured = Boolean(
-          err && typeof err === 'object' && 'isUnconfigured' in err && (err as { isUnconfigured?: boolean }).isUnconfigured
-        );
-        const errMsg = err instanceof Error ? err.message : String(err);
-
-        console.warn('[Discussion generation issue]:', errMsg);
-
-        if (isUnconfigured) {
-          // Missing API key -> seamlessly switch to demo without infinite error loop
-          setState((prev) => ({
-            ...prev,
-            engineMode: 'demo',
-            isGenerating: false,
-            generatingSpeakerId: null,
-            events: [
-              ...prev.events,
-              createSessionEvent('switched_to_demo', { reason: 'unconfigured_key' })
-            ]
-          }));
-          // Retry immediately in demo mode
-          scheduleCallback(genId, 500);
-          return;
-        }
-
-        // Real API failure -> display actionable error card and pause progression
-        setState((prev) => ({
-          ...prev,
-          isGenerating: false,
-          generatingSpeakerId: null,
-          activeSpeakerId: null,
-          voiceFlowState: 'error',
-          errorState: {
-            message: errMsg || 'Failed to generate discussion turn.',
-            retryable: true
-          },
-          events: [
-            ...prev.events,
-            createSessionEvent('ai_generation_failed', { error: errMsg })
-          ]
-        }));
+        handleGenerationError(err, genId, scheduleCallback);
         return;
       }
 
@@ -825,7 +840,7 @@ export function SessionProvider({
         }, readingDurationMs);
       }
     },
-    [generateTurn]
+    [generateTurn, handleGenerationError, triggerStudentOpportunityWindow]
   );
 
   // Main turn scheduler with clean cancellation
