@@ -12,6 +12,7 @@
  */
 
 import { AIPatience } from '@/types/session';
+import { audioPlaybackService } from '@/services/audio/audioPlaybackService';
 
 export interface SpeechRecognitionCallbacks {
   onSpeechStart?: () => void;
@@ -36,6 +37,8 @@ export class SpeechRecognitionService {
   private browserRecognition: unknown = null;
   private isListening = false;
   private isSpeaking = false;
+  private consecutiveSpeechFrames = 0;
+  private speechStartTime = 0;
   private accumulatedFinalText = '';
   private currentPartialText = '';
   private silenceTimer: NodeJS.Timeout | null = null;
@@ -45,6 +48,30 @@ export class SpeechRecognitionService {
     language: 'english',
     preferGateway: true
   };
+
+  /**
+   * Known STT hallucination / phantom noise artifacts.
+   */
+  private static readonly KNOWN_HALLUCINATIONS = new Set([
+    'thank you',
+    'thank you.',
+    'thank you very much',
+    'thanks for watching',
+    'subtitles by',
+    'subtitles',
+    'amara.org',
+    'subscribe',
+    'mbc',
+    'you',
+    'bye',
+    'goodbye',
+    'watching',
+    '[music]',
+    '(music)',
+    '[applause]',
+    '(applause)'
+  ]);
+
 
   private getSilenceThresholdMs(): number {
     switch (this.options.patience) {
@@ -195,9 +222,24 @@ export class SpeechRecognitionService {
           if (Math.abs(s) > maxAmp) maxAmp = Math.abs(s);
         }
 
-        // Local amplitude detection for instant interruption trigger
-        if (maxAmp > 0.08 && !this.isSpeaking) {
-          this.triggerSpeechStart();
+        // CRITICAL: When AI audio is playing through speakers, DO NOT trigger speech start
+        // solely based on raw microphone amplitude! Laptop speakers bleed directly into the mic,
+        // which previously caused the AI to immediately cut itself off after 1 word!
+        const isAiSpeaking = audioPlaybackService.getIsPlaying();
+
+        if (!isAiSpeaking) {
+          // Robust VAD: requires energy above 0.15 for at least 2 consecutive frames (~250ms)
+          // to reject keyboard taps, breathing, or gentle ambient room noise.
+          if (maxAmp > 0.15) {
+            this.consecutiveSpeechFrames++;
+            if (this.consecutiveSpeechFrames >= 2 && !this.isSpeaking) {
+              this.triggerSpeechStart();
+            }
+          } else {
+            this.consecutiveSpeechFrames = 0;
+          }
+        } else {
+          this.consecutiveSpeechFrames = 0;
         }
 
         // Send base64-encoded PCM chunk
@@ -267,7 +309,10 @@ export class SpeechRecognitionService {
       };
 
       recognition.onspeechstart = () => {
-        this.triggerSpeechStart();
+        // If AI is currently speaking, do not allow raw acoustic trigger to stop AI playback
+        if (!audioPlaybackService.getIsPlaying()) {
+          this.triggerSpeechStart();
+        }
       };
 
       recognition.onresult = (event: unknown) => {
@@ -288,7 +333,19 @@ export class SpeechRecognitionService {
         const currentActiveText = (this.accumulatedFinalText + ' ' + interim).trim();
         this.currentPartialText = currentActiveText;
 
-        if (currentActiveText) {
+        const cleanChars = currentActiveText.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
+
+        if (cleanChars.length >= 2) {
+          // If AI is currently speaking, require meaningful text (at least 2 words or >= 5 letters)
+          // before triggering barge-in interruption.
+          const isAiSpeaking = audioPlaybackService.getIsPlaying();
+          if (isAiSpeaking) {
+            const words = currentActiveText.split(/\s+/).filter((w) => w.length > 0);
+            if (words.length < 2 && cleanChars.length < 5) {
+              return;
+            }
+          }
+
           this.triggerSpeechStart();
           this.callbacks.onPartialTranscript?.(currentActiveText);
           this.resetSilenceTimer();
@@ -326,6 +383,19 @@ export class SpeechRecognitionService {
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    // Filter out pure punctuation or noise characters
+    const cleanChars = trimmed.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
+    if (cleanChars.length < 2) return;
+
+    // If AI is speaking, only trigger interruption if real substantive words were transcribed
+    const isAiSpeaking = audioPlaybackService.getIsPlaying();
+    if (isAiSpeaking) {
+      const words = trimmed.split(/\s+/).filter((w) => w.length > 0);
+      if (words.length < 2 && cleanChars.length < 5) {
+        return;
+      }
+    }
+
     this.triggerSpeechStart();
 
     if (isFinal) {
@@ -344,6 +414,7 @@ export class SpeechRecognitionService {
   private triggerSpeechStart() {
     if (!this.isSpeaking) {
       this.isSpeaking = true;
+      this.speechStartTime = Date.now();
       this.callbacks.onSpeechStart?.();
       this.callbacks.onStatusChange?.('speaking');
     }
@@ -361,18 +432,47 @@ export class SpeechRecognitionService {
   }
 
   /**
+   * Evaluates whether a transcript segment is a hallucination or noise artifact.
+   */
+  private isHallucinationOrNoise(text: string): boolean {
+    const normalized = text.toLowerCase().trim().replace(/[.,!?;:]+$/g, '');
+    if (SpeechRecognitionService.KNOWN_HALLUCINATIONS.has(normalized)) {
+      return true;
+    }
+
+    // Must have at least 3 alphanumeric or Indian language characters
+    const cleanChars = text.replace(/[^a-zA-Z0-9\u0900-\u097F]/g, '');
+    if (cleanChars.length < 3) {
+      return true;
+    }
+
+    // If only 1 word, must have at least 4 letters and not be a trivial filler
+    const words = text.trim().split(/\s+/).filter((w) => w.length > 0);
+    const trivialFillers = new Set(['um', 'uh', 'ah', 'the', 'so', 'a', 'an', 'oh', 'ok', 'okay', 'like', 'haan']);
+    if (words.length === 1 && trivialFillers.has(words[0].toLowerCase())) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Finalizes the student's turn after sufficient silence.
    */
   private commitTurnIfReady() {
     const textToCommit = (this.accumulatedFinalText || this.currentPartialText).trim();
-    if (textToCommit && textToCommit.length > 3) {
+
+    if (textToCommit && !this.isHallucinationOrNoise(textToCommit)) {
       this.callbacks.onTurnCommitted?.(textToCommit);
+    } else if (textToCommit) {
+      console.log(`[SpeechService] Discarded noise/hallucination turn: "${textToCommit}"`);
     }
 
     // Reset buffer for the next turn
     this.accumulatedFinalText = '';
     this.currentPartialText = '';
     this.isSpeaking = false;
+    this.consecutiveSpeechFrames = 0;
     this.callbacks.onPartialTranscript?.('');
     this.callbacks.onStatusChange?.('listening');
   }
@@ -384,6 +484,7 @@ export class SpeechRecognitionService {
     if (this.silenceTimer) clearTimeout(this.silenceTimer);
     this.commitTurnIfReady();
   }
+
 
   private stopAudioCapture() {
     if (this.processor) {

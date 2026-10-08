@@ -1,6 +1,51 @@
 import http from 'http';
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import url from 'url';
+import fs from 'fs';
+import path from 'path';
+
+// Load .env.local and .env into process.env if not already set
+function loadEnv() {
+  const envFiles = ['.env.local', '.env'];
+  for (const f of envFiles) {
+    const fullPath = path.resolve(process.cwd(), f);
+    if (fs.existsSync(fullPath)) {
+      try {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const eqIdx = trimmed.indexOf('=');
+          if (eqIdx !== -1) {
+            const key = trimmed.slice(0, eqIdx).trim();
+            const val = trimmed.slice(eqIdx + 1).trim();
+            if (!process.env[key]) {
+              process.env[key] = val;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[VoiceGW] Notice loading ${f}:`, err);
+      }
+    }
+  }
+}
+loadEnv();
+
+function getSarvamKeyPool(): string[] {
+  const pool: string[] = [];
+  if (process.env.SARVAM_API_KEYS) {
+    const list = process.env.SARVAM_API_KEYS.split(',').map((k) => k.trim()).filter(Boolean);
+    pool.push(...list);
+  }
+  if (process.env.SARVAM_API_KEY) {
+    const single = process.env.SARVAM_API_KEY.trim();
+    if (single && !pool.includes(single)) {
+      pool.unshift(single);
+    }
+  }
+  return Array.from(new Set(pool));
+}
 
 const PORT = parseInt(process.env.VOICE_GATEWAY_PORT || '3001', 10);
 const MAX_MESSAGE_BYTES = 64 * 1024; // 64 KB per chunk
@@ -25,13 +70,15 @@ function isOriginAllowed(originHeader?: string): boolean {
 const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url || '', true);
   if (parsed.pathname === '/health') {
+    const keyPool = getSarvamKeyPool();
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(
       JSON.stringify({
         status: 'ok',
         service: 'gd-arena-voice-gateway',
         port: PORT,
-        sarvamConfigured: Boolean(process.env.SARVAM_API_KEY && process.env.SARVAM_API_KEY.trim().length > 0)
+        sarvamConfigured: keyPool.length > 0,
+        keysAvailable: keyPool.length
       })
     );
     return;
@@ -69,7 +116,7 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
   const languageCode = (parsedUrl.query.language_code as string) || 'en-IN';
   const model = (parsedUrl.query.model as string) || 'saaras:v4';
 
-  const sarvamKey = process.env.SARVAM_API_KEY?.trim();
+  const keyPool = getSarvamKeyPool();
 
   // Safety timer to bound connection duration
   const sessionTimeout = setTimeout(() => {
@@ -77,7 +124,7 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
     clientWs.close(1000, 'Max session duration reached');
   }, MAX_SESSION_DURATION_MS);
 
-  if (!sarvamKey) {
+  if (keyPool.length === 0) {
     clientWs.send(
       JSON.stringify({
         type: 'status',
@@ -90,97 +137,136 @@ wss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) => {
     return;
   }
 
-  // Connect to upstream Sarvam Realtime WebSocket
+  // Connect to upstream Sarvam Realtime WebSocket with key fallback
   const upstreamUrl = `wss://api.sarvam.ai/speech-to-text-realtime/ws?language_code=${encodeURIComponent(
     languageCode
   )}&model=${encodeURIComponent(model)}`;
 
   let upstreamWs: WebSocket | null = null;
+  let activeKeyIndex = 0;
 
-  try {
-    upstreamWs = new WebSocket(upstreamUrl, {
-      headers: {
-        'api-subscription-key': sarvamKey
-      }
-    });
-
-    upstreamWs.on('open', () => {
-      clientWs.send(
-        JSON.stringify({
-          type: 'status',
-          ready: true,
-          message: 'Connected to Sarvam Realtime STT',
-          model,
-          languageCode
-        })
-      );
-    });
-
-    upstreamWs.on('message', (data: RawData) => {
-      try {
-        const text = data.toString('utf-8');
-        const parsed = JSON.parse(text);
-
-        // Normalize Sarvam realtime transcription events
-        if (parsed.type === 'data' && parsed.data?.transcript) {
-          clientWs.send(
-            JSON.stringify({
-              type: 'final',
-              transcript: parsed.data.transcript,
-              metrics: parsed.data.metrics
-            })
-          );
-        } else if (parsed.event === 'transcript.partial' || parsed.type === 'partial') {
-          clientWs.send(
-            JSON.stringify({
-              type: 'partial',
-              transcript: parsed.transcript || parsed.data?.transcript || ''
-            })
-          );
-        } else {
-          // Pass-through other events
-          clientWs.send(text);
-        }
-      } catch {
-        // Fallback pass-through if unparsed
-        clientWs.send(data.toString('utf-8'));
-      }
-    });
-
-    upstreamWs.on('error', (err) => {
-      console.error('[VoiceGW] Upstream Sarvam WebSocket error:', err.message);
+  const tryConnectUpstream = (keyIndex: number) => {
+    if (keyIndex >= keyPool.length) {
       if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(
+          JSON.stringify({
+            type: 'status',
+            ready: false,
+            message: 'All Sarvam keys failed or expired quota. Falling back to browser Web Speech.'
+          })
+        );
+      }
+      return;
+    }
+
+    activeKeyIndex = keyIndex;
+    const currentKey = keyPool[keyIndex];
+    let didOpen = false;
+
+    try {
+      upstreamWs = new WebSocket(upstreamUrl, {
+        headers: {
+          'api-subscription-key': currentKey
+        }
+      });
+
+      upstreamWs.on('open', () => {
+        didOpen = true;
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(
+            JSON.stringify({
+              type: 'status',
+              ready: true,
+              message: 'Connected to Sarvam Realtime STT',
+              model,
+              languageCode
+            })
+          );
+        }
+      });
+
+      upstreamWs.on('message', (data: RawData) => {
+        try {
+          const text = data.toString('utf-8');
+          const parsed = JSON.parse(text);
+
+          // Normalize Sarvam realtime transcription events
+          if (parsed.type === 'data' && parsed.data?.transcript) {
+            clientWs.send(
+              JSON.stringify({
+                type: 'final',
+                transcript: parsed.data.transcript,
+                metrics: parsed.data.metrics
+              })
+            );
+          } else if (parsed.event === 'transcript.partial' || parsed.type === 'partial') {
+            clientWs.send(
+              JSON.stringify({
+                type: 'partial',
+                transcript: parsed.transcript || parsed.data?.transcript || ''
+              })
+            );
+          } else {
+            // Pass-through other events
+            clientWs.send(text);
+          }
+        } catch {
+          // Fallback pass-through if unparsed
+          clientWs.send(data.toString('utf-8'));
+        }
+      });
+
+      upstreamWs.on('error', (err) => {
+        console.warn(`[VoiceGW] Upstream Sarvam WebSocket error with key #${keyIndex + 1}:`, err.message);
+        if (!didOpen && activeKeyIndex + 1 < keyPool.length) {
+          console.log(`[VoiceGW] Retrying upstream with fallback key #${activeKeyIndex + 2}...`);
+          tryConnectUpstream(activeKeyIndex + 1);
+        } else if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(
+            JSON.stringify({
+              type: 'error',
+              message: `Sarvam upstream error: ${err.message}`
+            })
+          );
+        }
+      });
+
+      upstreamWs.on('close', (code, reason) => {
+        if (!didOpen && activeKeyIndex + 1 < keyPool.length) {
+          console.log(`[VoiceGW] Upstream closed early (${code}: ${reason.toString()}). Retrying with key #${activeKeyIndex + 2}...`);
+          tryConnectUpstream(activeKeyIndex + 1);
+          return;
+        }
+
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(
+            JSON.stringify({
+              type: 'upstream_closed',
+              code,
+              reason: reason.toString()
+            })
+          );
+          clientWs.close();
+        }
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[VoiceGW] Failed to initialize upstream key #${keyIndex + 1}:`, msg);
+      if (keyIndex + 1 < keyPool.length) {
+        tryConnectUpstream(keyIndex + 1);
+      } else if (clientWs.readyState === WebSocket.OPEN) {
         clientWs.send(
           JSON.stringify({
             type: 'error',
-            message: `Sarvam upstream error: ${err.message}`
+            message: `Failed to connect upstream: ${msg}`
           })
         );
       }
-    });
+    }
+  };
 
-    upstreamWs.on('close', (code, reason) => {
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(
-          JSON.stringify({
-            type: 'upstream_closed',
-            code,
-            reason: reason.toString()
-          })
-        );
-        clientWs.close();
-      }
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[VoiceGW] Failed to initialize upstream connection:', msg);
-    clientWs.send(
-      JSON.stringify({
-        type: 'error',
-        message: `Failed to connect upstream: ${msg}`
-      })
-    );
-  }
+  tryConnectUpstream(0);
+
 
   // Handle client messages (forwarding audio chunks)
   clientWs.on('message', (message: RawData) => {

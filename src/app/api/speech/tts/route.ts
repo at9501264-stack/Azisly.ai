@@ -31,6 +31,22 @@ const VALID_SARVAM_SPEAKERS = new Set([
   'shubh', 'priya', 'rahul', 'neha', 'ashutosh', 'rohan', 'simran'
 ]);
 
+function getSarvamKeyPool(): string[] {
+  const pool: string[] = [];
+  if (process.env.SARVAM_API_KEYS) {
+    const list = process.env.SARVAM_API_KEYS.split(',').map((k) => k.trim()).filter(Boolean);
+    pool.push(...list);
+  }
+  if (process.env.SARVAM_API_KEY) {
+    const single = process.env.SARVAM_API_KEY.trim();
+    if (single && !pool.includes(single)) {
+      pool.unshift(single);
+    }
+  }
+  // Remove duplicates while preserving order
+  return Array.from(new Set(pool));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'local-user';
@@ -41,8 +57,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.SARVAM_API_KEY?.trim();
-    if (!apiKey) {
+    const keyPool = getSarvamKeyPool();
+    if (keyPool.length === 0) {
       return NextResponse.json(
         {
           error: 'SARVAM_API_KEY is not configured on the server. Please add SARVAM_API_KEY to .env.local to enable Sarvam AI voices.',
@@ -69,68 +85,83 @@ export async function POST(req: NextRequest) {
     const targetLanguage = languageCode === 'hi-IN' ? 'hi-IN' : 'en-IN';
     const targetPace = typeof pace === 'number' && pace >= 0.5 && pace <= 2.0 ? pace : 1.0;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    let lastError: string = 'Unknown error';
+    let lastStatusCode = 502;
 
-    try {
-      const response = await fetch('https://api.sarvam.ai/text-to-speech', {
-        method: 'POST',
-        headers: {
-          'api-subscription-key': apiKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          text: trimmedText,
-          model: 'bulbul:v3',
-          language_code: targetLanguage,
-          speaker: targetSpeaker,
-          pace: targetPace,
-          output_audio_codec: 'mp3',
-          speech_sample_rate: 24000
-        }),
-        signal: controller.signal
-      });
+    // Try keys from the pool in order (auto-failover on quota/rate limit)
+    for (let i = 0; i < keyPool.length; i++) {
+      const activeKey = keyPool[i];
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
 
-      clearTimeout(timeout);
+      try {
+        const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+          method: 'POST',
+          headers: {
+            'api-subscription-key': activeKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            text: trimmedText,
+            model: 'bulbul:v3',
+            language_code: targetLanguage,
+            speaker: targetSpeaker,
+            pace: targetPace,
+            output_audio_codec: 'mp3',
+            speech_sample_rate: 24000
+          }),
+          signal: controller.signal
+        });
 
-      if (!response.ok) {
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          const data = await response.json();
+          const audioBase64 = data.audios?.[0];
+
+          if (!audioBase64) {
+            lastError = 'Sarvam TTS response did not contain audio data.';
+            continue;
+          }
+
+          // Word count rough duration estimate: ~150 words per minute
+          const wordCount = trimmedText.split(/\s+/).length;
+          const durationEstimateMs = Math.round((wordCount / (150 * targetPace)) * 60 * 1000);
+
+          return NextResponse.json({
+            audioBase64,
+            format: 'mp3',
+            speaker: targetSpeaker,
+            languageCode: targetLanguage,
+            durationEstimateMs: Math.max(durationEstimateMs, 1000)
+          });
+        }
+
         const errText = await response.text();
-        console.error('Sarvam TTS API Error:', response.status, errText);
-        return NextResponse.json(
-          { error: `Sarvam TTS API returned error (${response.status}): ${errText}`, code: 'UPSTREAM_ERROR' },
-          { status: response.status >= 500 ? 502 : 400 }
-        );
+        console.warn(`[SarvamTTS] Key #${i + 1} failed (${response.status}): ${errText}`);
+        lastStatusCode = response.status >= 500 ? 502 : response.status;
+        lastError = `Sarvam TTS API returned error (${response.status}): ${errText}`;
+
+        // If client error is 400 (bad input like invalid text), do not retry other keys
+        if (response.status === 400) {
+          return NextResponse.json({ error: lastError, code: 'UPSTREAM_ERROR' }, { status: 400 });
+        }
+      } catch (fetchErr: unknown) {
+        clearTimeout(timeout);
+        const isAbort = (fetchErr as { name?: string })?.name === 'AbortError';
+        lastError = isAbort ? 'Sarvam TTS request timed out after 12s.' : String(fetchErr);
+        lastStatusCode = 504;
+        console.warn(`[SarvamTTS] Key #${i + 1} network error: ${lastError}`);
       }
-
-      const data = await response.json();
-      const audioBase64 = data.audios?.[0];
-
-      if (!audioBase64) {
-        return NextResponse.json(
-          { error: 'Sarvam TTS response did not contain audio data.', code: 'INVALID_AUDIO' },
-          { status: 502 }
-        );
-      }
-
-      // Word count rough duration estimate: ~150 words per minute
-      const wordCount = trimmedText.split(/\s+/).length;
-      const durationEstimateMs = Math.round((wordCount / (150 * targetPace)) * 60 * 1000);
-
-      return NextResponse.json({
-        audioBase64,
-        format: 'mp3',
-        speaker: targetSpeaker,
-        languageCode: targetLanguage,
-        durationEstimateMs: Math.max(durationEstimateMs, 1000)
-      });
-    } catch (fetchErr: unknown) {
-      clearTimeout(timeout);
-      const isAbort = (fetchErr as { name?: string })?.name === 'AbortError';
-      const msg = isAbort ? 'Sarvam TTS request timed out after 12s.' : String(fetchErr);
-      return NextResponse.json({ error: msg, code: 'NETWORK_TIMEOUT' }, { status: 504 });
     }
+
+    return NextResponse.json(
+      { error: `All configured Sarvam keys failed. Last error: ${lastError}`, code: 'UPSTREAM_ERROR' },
+      { status: lastStatusCode }
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `Internal server error: ${msg}` }, { status: 500 });
   }
 }
+

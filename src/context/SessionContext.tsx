@@ -973,25 +973,41 @@ export function SessionProvider({
             if (!isSubscribed) return;
             studentSpeechStartRef.current = Date.now();
 
-            // Interruption protocol: immediately silence any playing AI voice!
-            if (audioPlaybackService.getIsPlaying()) {
-              sarvamSpeechProvider.stop();
-            }
+            // When AI is not speaking, immediately give candidate the floor
+            if (!audioPlaybackService.getIsPlaying()) {
+              if (inFlightAbortRef.current) {
+                inFlightAbortRef.current.abort();
+              }
 
-            // Invalidate in-flight generation
-            if (inFlightAbortRef.current) {
-              inFlightAbortRef.current.abort();
+              setState((prev) => ({
+                ...prev,
+                activeSpeakerId: STUDENT_PARTICIPANT.id,
+                voiceFlowState: 'student_speaking',
+                events: [...prev.events, createSessionEvent('student_speech_start')]
+              }));
             }
-
-            setState((prev) => ({
-              ...prev,
-              activeSpeakerId: STUDENT_PARTICIPANT.id,
-              voiceFlowState: 'student_speaking',
-              events: [...prev.events, createSessionEvent('student_speech_start')]
-            }));
           },
           onPartialTranscript: (text) => {
             if (!isSubscribed) return;
+            const trimmed = text.trim();
+
+            // Verified student barge-in: If AI is actively speaking and student utters verified words,
+            // immediately halt AI playback and grant floor to student
+            if (audioPlaybackService.getIsPlaying() && trimmed.length >= 4) {
+              sarvamSpeechProvider.stop();
+              if (inFlightAbortRef.current) {
+                inFlightAbortRef.current.abort();
+              }
+              setState((prev) => ({
+                ...prev,
+                activeSpeakerId: STUDENT_PARTICIPANT.id,
+                voiceFlowState: 'student_speaking',
+                liveCaption: text,
+                events: [...prev.events, createSessionEvent('student_speech_start')]
+              }));
+              return;
+            }
+
             setState((prev) => ({
               ...prev,
               liveCaption: text
@@ -999,6 +1015,12 @@ export function SessionProvider({
           },
           onTurnCommitted: (text) => {
             if (!isSubscribed) return;
+            const trimmed = text.trim();
+            if (!trimmed || trimmed.length < 3) {
+              setState((prev) => ({ ...prev, liveCaption: '' }));
+              return;
+            }
+
             const speakingDur = Math.max(800, Date.now() - studentSpeechStartRef.current);
 
             setState((prev) => ({
@@ -1011,8 +1033,9 @@ export function SessionProvider({
               ]
             }));
 
-            submitStudentTurn(text);
+            submitStudentTurn(trimmed);
           },
+
           onError: (err) => {
             console.warn('[STT Service Notice]:', err.message);
           }
