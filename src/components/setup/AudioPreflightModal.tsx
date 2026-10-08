@@ -342,6 +342,7 @@ export function AudioPreflightModal({
 
           <button
             onClick={async () => {
+              await audioPlaybackService.unlockAudio();
               if (permissionState === 'prompt') {
                 await requestMicrophoneAccess();
               }

@@ -86,9 +86,9 @@ export function TranscriptView({
             <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-2 text-zinc-400">
               <Bot className="w-5 h-5 text-zinc-400" />
             </div>
-            <p className="text-sm font-medium text-zinc-300">Awaiting opening address...</p>
+            <p className="text-sm font-medium text-zinc-300">Prof. Sharma is starting the discussion...</p>
             <p className="text-xs text-zinc-500 mt-1 max-w-xs">
-              Prof. Sharma will open the session shortly. You can also start the discussion yourself anytime using your voice or keyboard.
+              Listen to the opening topic and ground rules. You can also jump in with your voice or keyboard anytime!
             </p>
           </div>
         ) : (
