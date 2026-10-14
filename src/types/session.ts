@@ -1,29 +1,30 @@
-export type DiscussionPhase = 'setup' | 'opening' | 'discussion' | 'closing' | 'completed';
+export type DiscussionPhase =
+  "setup" | "opening" | "discussion" | "closing" | "completed";
 
-export type LanguagePreference = 'english' | 'hinglish';
+export type LanguagePreference = "english" | "hinglish";
 
-export type AIPatience = 'quick' | 'balanced' | 'patient';
+export type AIPatience = "quick" | "balanced" | "patient";
 
-export type TurnSource = 'student' | 'scripted-demo' | 'model';
+export type TurnSource = "student" | "scripted-demo" | "model";
 
-export type DeliveryState = 'queued' | 'in-progress' | 'complete';
+export type DeliveryState = "queued" | "in-progress" | "complete";
 
-export type EngineMode = 'ai' | 'demo';
+export type EngineMode = "ai" | "demo";
 
-export type InteractionMode = 'voice' | 'text';
+export type InteractionMode = "voice" | "text";
 
-export type TurnDeliveryStatus = 'fully_delivered' | 'interrupted' | 'unplayed';
+export type TurnDeliveryStatus = "fully_delivered" | "interrupted" | "unplayed";
 
 export type VoiceFlowState =
-  | 'idle'
-  | 'listening'
-  | 'student_speaking'
-  | 'thinking'
-  | 'ai_speaking'
-  | 'paused'
-  | 'reconnecting'
-  | 'error'
-  | 'completed';
+  | "idle"
+  | "listening"
+  | "student_speaking"
+  | "thinking"
+  | "ai_speaking"
+  | "paused"
+  | "reconnecting"
+  | "error"
+  | "completed";
 
 export interface RoomConfig {
   topic: string;
@@ -36,10 +37,11 @@ export interface RoomConfig {
   mode?: InteractionMode;
 }
 
-export type ParticipantRole = 'moderator' | 'student' | 'ai_participant';
+export type ParticipantRole = "moderator" | "student" | "ai_participant";
 
 export interface ParticipantVoiceConfig {
   sarvamVoice: string; // e.g. 'ratan', 'aditya', 'ishita', 'kabir', 'kavya', 'dev'
+  geminiVoice?: string; // e.g. 'Charon', 'Puck', 'Aoede', 'Fenrir', 'Kore'
   pace: number;
   pitch?: number;
 }
@@ -77,7 +79,7 @@ export interface TranscriptTurn {
 }
 
 export interface DiscussionTimingEvent {
-  type: 'student_speech' | 'ai_playback';
+  type: "student_speech" | "ai_playback";
   speakerId: string;
   startMs: number;
   endMs: number;
@@ -93,30 +95,30 @@ export interface SessionMetrics {
 }
 
 export type SessionEventType =
-  | 'session_started'
-  | 'phase_changed'
-  | 'student_turn_submitted'
-  | 'ai_generation_started'
-  | 'ai_generation_completed'
-  | 'ai_generation_failed'
-  | 'ai_generation_cancelled'
-  | 'turn_displayed'
-  | 'session_paused'
-  | 'session_resumed'
-  | 'session_ended'
-  | 'switched_to_demo'
+  | "session_started"
+  | "phase_changed"
+  | "student_turn_submitted"
+  | "ai_generation_started"
+  | "ai_generation_completed"
+  | "ai_generation_failed"
+  | "ai_generation_cancelled"
+  | "turn_displayed"
+  | "session_paused"
+  | "session_resumed"
+  | "session_ended"
+  | "switched_to_demo"
   // Phase 3 events
-  | 'student_speech_start'
-  | 'student_speech_end'
-  | 'tts_request_start'
-  | 'tts_playback_start'
-  | 'tts_playback_complete'
-  | 'tts_interrupted'
-  | 'connection_lost'
-  | 'connection_restored'
-  | 'mic_permission_granted'
-  | 'mic_permission_denied'
-  | 'audio_unlocked';
+  | "student_speech_start"
+  | "student_speech_end"
+  | "tts_request_start"
+  | "tts_playback_start"
+  | "tts_playback_complete"
+  | "tts_interrupted"
+  | "connection_lost"
+  | "connection_restored"
+  | "mic_permission_granted"
+  | "mic_permission_denied"
+  | "audio_unlocked";
 
 export interface RecordedSessionEvent {
   id: string;
@@ -163,24 +165,24 @@ export interface SessionState {
 }
 
 export type SessionEvent =
-  | { type: 'START_SESSION'; config: RoomConfig }
-  | { type: 'RESUME' }
-  | { type: 'PAUSE' }
-  | { type: 'END_SESSION' }
-  | { type: 'RESET_SESSION' }
-  | { type: 'JUMP_TO_CLOSING' }
-  | { type: 'TICK'; elapsedSeconds: number }
-  | { type: 'SPEAKER_START'; speakerId: string }
-  | { type: 'SPEAKER_STOP' }
-  | { type: 'APPEND_TURN'; turn: TranscriptTurn }
-  | { type: 'SUBMIT_STUDENT_TURN'; text: string }
-  | { type: 'TOGGLE_CAPTIONS' }
-  | { type: 'TRANSITION_PHASE'; phase: DiscussionPhase }
-  | { type: 'SWITCH_TO_DEMO' }
-  | { type: 'RETRY_GENERATION' }
+  | { type: "START_SESSION"; config: RoomConfig }
+  | { type: "RESUME" }
+  | { type: "PAUSE" }
+  | { type: "END_SESSION" }
+  | { type: "RESET_SESSION" }
+  | { type: "JUMP_TO_CLOSING" }
+  | { type: "TICK"; elapsedSeconds: number }
+  | { type: "SPEAKER_START"; speakerId: string }
+  | { type: "SPEAKER_STOP" }
+  | { type: "APPEND_TURN"; turn: TranscriptTurn }
+  | { type: "SUBMIT_STUDENT_TURN"; text: string }
+  | { type: "TOGGLE_CAPTIONS" }
+  | { type: "TRANSITION_PHASE"; phase: DiscussionPhase }
+  | { type: "SWITCH_TO_DEMO" }
+  | { type: "RETRY_GENERATION" }
   // Phase 3 events
-  | { type: 'SET_VOICE_FLOW_STATE'; state: VoiceFlowState }
-  | { type: 'SET_LIVE_CAPTION'; caption: string }
-  | { type: 'SET_AUDIO_BLOCKED'; blocked: boolean }
-  | { type: 'SET_MIC_MUTED'; muted: boolean }
-  | { type: 'INTERRUPT_CURRENT_SPEAKER' };
+  | { type: "SET_VOICE_FLOW_STATE"; state: VoiceFlowState }
+  | { type: "SET_LIVE_CAPTION"; caption: string }
+  | { type: "SET_AUDIO_BLOCKED"; blocked: boolean }
+  | { type: "SET_MIC_MUTED"; muted: boolean }
+  | { type: "INTERRUPT_CURRENT_SPEAKER" };

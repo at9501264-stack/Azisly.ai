@@ -5,6 +5,7 @@
 Phase 4 implements an **evidence-backed post-discussion practice coaching report** for GD Arena. It calculates quantitative participation metrics deterministically in code, evaluates qualitative competencies across 6 core dimensions using server-side Gemini, strictly verifies all cited quotations against eligible transcript turns in code, provides a strategic "What you could have said" alternative, and persists and exports the validated report.
 
 ### Key Highlights
+
 - **Deterministic Metrics Engine (`metricsCalculator.ts`)**:
   - Calculates candidate speech duration, individual AI debater audio playback durations, and moderator playback duration.
   - Merges overlapping same-speaker timing intervals (`mergeIntervals`) to prevent double-counting.
@@ -44,7 +45,7 @@ Phase 4 implements an **evidence-backed post-discussion practice coaching report
   - Separate moderator row.
   - Six feedback cards with qualitative rating badges, concise observations, actionable improvement tips, and clickable evidence chips.
   - **Click-to-Scroll & Highlight**: Clicking an evidence quote smoothly scrolls to and highlights the target transcript turn with a luminous ring animation (`View in transcript`).
-  - Prominent disclaimer: *"AI-generated practice coaching based strictly on observable behaviours in this session; not an official placement assessment."*
+  - Prominent disclaimer: _"AI-generated practice coaching based strictly on observable behaviours in this session; not an official placement assessment."_
 - **Persistence & Export**:
   - Persists validated report in `localStorage` under `gd_arena_session_v4`.
   - Reuses matching cached reports on reload; detects stale reports if transcript changes.
@@ -57,6 +58,7 @@ Phase 4 implements an **evidence-backed post-discussion practice coaching report
 ## 2. API Specification: `POST /api/discussion/report`
 
 ### Request Body
+
 ```json
 {
   "topic": "Should AI Replace Junior Software Engineers?",
@@ -83,6 +85,7 @@ Phase 4 implements an **evidence-backed post-discussion practice coaching report
 ```
 
 ### Response Body
+
 ```json
 {
   "success": true,
@@ -98,8 +101,18 @@ Phase 4 implements an **evidence-backed post-discussion practice coaching report
       "aiPlaybackDurationMs": { "ai-aarav": 68000, "ai-meera": 54000 },
       "moderatorPlaybackDurationMs": 32000,
       "totalActiveSpeakingDurationMs": 196000,
-      "speakingSharePercent": { "student-you": 21, "mod-1": 16, "ai-aarav": 35, "ai-meera": 28 },
-      "turnCountsBySpeaker": { "student-you": 3, "mod-1": 2, "ai-aarav": 4, "ai-meera": 3 },
+      "speakingSharePercent": {
+        "student-you": 21,
+        "mod-1": 16,
+        "ai-aarav": 35,
+        "ai-meera": 28
+      },
+      "turnCountsBySpeaker": {
+        "student-you": 3,
+        "mod-1": 2,
+        "ai-aarav": 4,
+        "ai-meera": 3
+      },
       "totalTurns": 12,
       "studentFirstContributionSecs": 45,
       "studentContributedInClosing": true,
@@ -149,32 +162,32 @@ Phase 4 implements an **evidence-backed post-discussion practice coaching report
 
 ## 3. Architecture & File Reference
 
-| File | Component / Role |
-|---|---|
-| `src/types/report.ts` | Complete domain types: `ReportDimensionId`, `DimensionRating`, `EvidenceReference`, `DimensionEvaluation`, `AlternativeOpportunity`, `DeterministicMetrics`, `SessionReport`. |
-| `src/lib/metricsCalculator.ts` | Deterministic metrics calculator: same-speaker interval merging, speaking share denominator, first contribution time, closing participation, interruption counts. |
-| `src/lib/evidenceVerifier.ts` | Verifies quotes as exact substrings of eligible text, strips unplayed audio tails, binds authoritative timestamps, computes content fingerprints. |
-| `src/lib/reportPromptBuilder.ts` | Builds XML-isolated prompts enforcing 6 dimensions, objective ratings, anti-manipulation rules, and alternative opportunities. |
-| `src/app/api/discussion/report/route.ts` | Server route with rate limiting, silent-student short-circuit, Gemini calling, and 1-pass bounded repair. |
-| `src/context/SessionContext.tsx` | Manages `report` state, `generateReport` action, cache reuse, stale report detection, and auto-generation on session completion. |
-| `src/lib/storage.ts` | Persists session and validated report under `gd_arena_session_v4`. |
-| `src/components/summary/SessionSummary.tsx` | Renders report banner, metrics breakdown with bars, 6 dimension cards, click-to-scroll highlight, "What you could have said" card, and Markdown/JSON/TXT exports. |
-| `scripts/verify-state-machine.ts` | Automated test suite verifying 19 acceptance checks across Phase 1, 2, 3, and 4. |
+| File                                        | Component / Role                                                                                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/types/report.ts`                       | Complete domain types: `ReportDimensionId`, `DimensionRating`, `EvidenceReference`, `DimensionEvaluation`, `AlternativeOpportunity`, `DeterministicMetrics`, `SessionReport`. |
+| `src/lib/metricsCalculator.ts`              | Deterministic metrics calculator: same-speaker interval merging, speaking share denominator, first contribution time, closing participation, interruption counts.             |
+| `src/lib/evidenceVerifier.ts`               | Verifies quotes as exact substrings of eligible text, strips unplayed audio tails, binds authoritative timestamps, computes content fingerprints.                             |
+| `src/lib/reportPromptBuilder.ts`            | Builds XML-isolated prompts enforcing 6 dimensions, objective ratings, anti-manipulation rules, and alternative opportunities.                                                |
+| `src/app/api/discussion/report/route.ts`    | Server route with rate limiting, silent-student short-circuit, Gemini calling, and 1-pass bounded repair.                                                                     |
+| `src/context/SessionContext.tsx`            | Manages `report` state, `generateReport` action, cache reuse, stale report detection, and auto-generation on session completion.                                              |
+| `src/lib/storage.ts`                        | Persists session and validated report under `gd_arena_session_v4`.                                                                                                            |
+| `src/components/summary/SessionSummary.tsx` | Renders report banner, metrics breakdown with bars, 6 dimension cards, click-to-scroll highlight, "What you could have said" card, and Markdown/JSON/TXT exports.             |
+| `scripts/verify-state-machine.ts`           | Automated test suite verifying 19 acceptance checks across Phase 1, 2, 3, and 4.                                                                                              |
 
 ---
 
 ## 4. Verification Results
 
-| Check | Focus Area | Result |
-|---|---|---|
-| **Turbopack Build** | Production Next.js compilation (`/`, `/api/discussion/report`, `/api/discussion/turn`, `/api/speech/tts`) | **PASS** (Clean build) |
-| **Check 1–13** | Phase 1–3 topics, panel sizing, speaker selection, voice personas, interruption slicing, fallbacks | **PASS** |
-| **Check 14: Overlap Merging** | Merges overlapping same-speaker timing intervals without double-counting | **PASS** |
-| **Check 15: Deterministic Metrics** | Computes durations, shares, timestamps, closing flags, and turn counts with synthetic transcript | **PASS** |
-| **Check 16: Text-Only Fallback** | Omits voice durations (`null`) while preserving turn counts in text mode | **PASS** |
-| **Check 17: Evidence Verifier** | Rejects unplayed interrupted text, rejects fabricated quotes, rejects unknown turn IDs, binds domain timestamps | **PASS** |
-| **Check 18: Silent Student** | Deterministically returns "Not observed" with 0 fabricated claims and 0 LLM calls | **PASS** |
-| **Check 19: Cache Consistency** | Fingerprints match identical sessions and change when turns are extended | **PASS** |
+| Check                               | Focus Area                                                                                                      | Result                 |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| **Turbopack Build**                 | Production Next.js compilation (`/`, `/api/discussion/report`, `/api/discussion/turn`, `/api/speech/tts`)       | **PASS** (Clean build) |
+| **Check 1–13**                      | Phase 1–3 topics, panel sizing, speaker selection, voice personas, interruption slicing, fallbacks              | **PASS**               |
+| **Check 14: Overlap Merging**       | Merges overlapping same-speaker timing intervals without double-counting                                        | **PASS**               |
+| **Check 15: Deterministic Metrics** | Computes durations, shares, timestamps, closing flags, and turn counts with synthetic transcript                | **PASS**               |
+| **Check 16: Text-Only Fallback**    | Omits voice durations (`null`) while preserving turn counts in text mode                                        | **PASS**               |
+| **Check 17: Evidence Verifier**     | Rejects unplayed interrupted text, rejects fabricated quotes, rejects unknown turn IDs, binds domain timestamps | **PASS**               |
+| **Check 18: Silent Student**        | Deterministically returns "Not observed" with 0 fabricated claims and 0 LLM calls                               | **PASS**               |
+| **Check 19: Cache Consistency**     | Fingerprints match identical sessions and change when turns are extended                                        | **PASS**               |
 
 ---
 
@@ -192,6 +205,7 @@ npm run dev
 ```
 
 ### Manual Testing Walkthrough
+
 1. Navigate to `http://localhost:3000`.
 2. Configure a 5-minute English room and start discussion.
 3. Allow the moderator to open, contribute at least 1 turn, interject during an AI turn, and conclude.
@@ -210,26 +224,26 @@ Phase 5 completes the five-phase build of GD Arena. All integration fixes, resou
 
 ### Acceptance Audit Matrix
 
-| Feature / Capability | Status | Implementation & Verification Details |
-|---|---|---|
-| **Topic Selection & Custom Topic** | **Working & Verified** | 8 placement topics + custom topic with min-length validation (`RoomSetup.tsx`). |
-| **Panel Sizing (3–5 AI Debaters)** | **Working & Verified** | Scalable roster (`Aarav`, `Meera`, `Kabir`, `Riya`, `Dev`). Moderator and student never count toward AI total. |
-| **Distinct AI Personas** | **Working & Verified** | Persona prompt constraints, XML isolation, and distinct voice assignments (`participants.ts`). |
-| **Live Student STT & Interim Captions** | **Working & Verified** | Realtime audio streaming via Voice Gateway + browser `webkitSpeechRecognition` fallback. Ephemeral captions separated from committed turns. |
-| **AI Speech & Distinct Voices** | **Working & Verified** | Sarvam AI `bulbul:v3` voices (`ratan`, `aditya`, `ishita`, etc.) + browser `speechSynthesis` fallback. |
-| **Single-Voice Serialization** | **Working & Verified** | Strictly enforced in `audioPlaybackService.ts`. Only one AI participant can speak at a time. |
-| **Instant Barge-In Interruption** | **Working & Verified** | Candidate speech halts AI audio immediately (<100ms). Turn is marked `[interrupted]` and delivered text is trimmed. |
-| **Flow Controls (Timer, Pause, Closing)** | **Working & Verified** | Clock ticker, pause/resume, and early "Jump to closing — demo" sequence all verified. |
-| **Cancellation & Resource Cleanup** | **Working & Verified** | `bumpGeneration` aborts in-flight LLM/TTS calls. Microphone tracks, AudioContexts, and intervals cleaned up on exit/reset. |
-| **Deterministic Metrics Calculation** | **Working & Verified** | Overlapping intervals merged, speaking share denominator strictly defined, moderator separated. |
-| **Strict Evidence Verification** | **Working & Verified** | Rejects unplayed interrupted tails, rejects non-substring quotes and unknown turns. Binds domain timestamps. |
-| **Silent Student Handling** | **Working & Verified** | 0 student turns deterministically yields "Not observed" with 0 LLM API calls and 0 token spend. |
-| **Interactive Evidence Highlighting** | **Working & Verified** | Clicking "View in transcript" on evidence chips scrolls and illuminates the turn with a turquoise highlight. |
-| **Differentiator: "What You Could Have Said"** | **Working & Verified** | Identifies strategic pivot opportunity and provides a model alternative response. |
-| **Report Persistence & Exports** | **Working & Verified** | Cached by content fingerprint under `gd_arena_session_v4`. Downloads available in Markdown, JSON, and TXT. |
-| **Deployment Readiness** | **Working & Verified** | Dynamic gateway endpoint (`NEXT_PUBLIC_VOICE_GATEWAY_URL`), configurable CORS origins (`ALLOWED_ORIGIN_HOSTS`), `.env.example`. |
-| **Zero-Key & Offline Fallback** | **Working & Verified** | Omitting API keys smoothly engages scripted discussion engine and Web Speech API without crashing. |
-| **Live Cloud LLM / Voice Verification** | *Implemented, Key-Dependent* | Server routes are wired and pass build checks; live cloud generation activates when `GEMINI_API_KEY` / `SARVAM_API_KEY` are provided. |
+| Feature / Capability                           | Status                       | Implementation & Verification Details                                                                                                       |
+| ---------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Topic Selection & Custom Topic**             | **Working & Verified**       | 8 placement topics + custom topic with min-length validation (`RoomSetup.tsx`).                                                             |
+| **Panel Sizing (3–5 AI Debaters)**             | **Working & Verified**       | Scalable roster (`Aarav`, `Meera`, `Kabir`, `Riya`, `Dev`). Moderator and student never count toward AI total.                              |
+| **Distinct AI Personas**                       | **Working & Verified**       | Persona prompt constraints, XML isolation, and distinct voice assignments (`participants.ts`).                                              |
+| **Live Student STT & Interim Captions**        | **Working & Verified**       | Realtime audio streaming via Voice Gateway + browser `webkitSpeechRecognition` fallback. Ephemeral captions separated from committed turns. |
+| **AI Speech & Distinct Voices**                | **Working & Verified**       | Sarvam AI `bulbul:v3` voices (`ratan`, `aditya`, `ishita`, etc.) + browser `speechSynthesis` fallback.                                      |
+| **Single-Voice Serialization**                 | **Working & Verified**       | Strictly enforced in `audioPlaybackService.ts`. Only one AI participant can speak at a time.                                                |
+| **Instant Barge-In Interruption**              | **Working & Verified**       | Candidate speech halts AI audio immediately (<100ms). Turn is marked `[interrupted]` and delivered text is trimmed.                         |
+| **Flow Controls (Timer, Pause, Closing)**      | **Working & Verified**       | Clock ticker, pause/resume, and early "Jump to closing — demo" sequence all verified.                                                       |
+| **Cancellation & Resource Cleanup**            | **Working & Verified**       | `bumpGeneration` aborts in-flight LLM/TTS calls. Microphone tracks, AudioContexts, and intervals cleaned up on exit/reset.                  |
+| **Deterministic Metrics Calculation**          | **Working & Verified**       | Overlapping intervals merged, speaking share denominator strictly defined, moderator separated.                                             |
+| **Strict Evidence Verification**               | **Working & Verified**       | Rejects unplayed interrupted tails, rejects non-substring quotes and unknown turns. Binds domain timestamps.                                |
+| **Silent Student Handling**                    | **Working & Verified**       | 0 student turns deterministically yields "Not observed" with 0 LLM API calls and 0 token spend.                                             |
+| **Interactive Evidence Highlighting**          | **Working & Verified**       | Clicking "View in transcript" on evidence chips scrolls and illuminates the turn with a turquoise highlight.                                |
+| **Differentiator: "What You Could Have Said"** | **Working & Verified**       | Identifies strategic pivot opportunity and provides a model alternative response.                                                           |
+| **Report Persistence & Exports**               | **Working & Verified**       | Cached by content fingerprint under `gd_arena_session_v4`. Downloads available in Markdown, JSON, and TXT.                                  |
+| **Deployment Readiness**                       | **Working & Verified**       | Dynamic gateway endpoint (`NEXT_PUBLIC_VOICE_GATEWAY_URL`), configurable CORS origins (`ALLOWED_ORIGIN_HOSTS`), `.env.example`.             |
+| **Zero-Key & Offline Fallback**                | **Working & Verified**       | Omitting API keys smoothly engages scripted discussion engine and Web Speech API without crashing.                                          |
+| **Live Cloud LLM / Voice Verification**        | _Implemented, Key-Dependent_ | Server routes are wired and pass build checks; live cloud generation activates when `GEMINI_API_KEY` / `SARVAM_API_KEY` are provided.       |
 
 ---
 
@@ -250,6 +264,7 @@ Phase 5 completes the five-phase build of GD Arena. All integration fixes, resou
 Phase 6 completes the final acceptance audit, resolves static analysis and edge-case code issues, automates golden path verification, and establishes complete hackathon submission documentation.
 
 ### Ready-to-Demo Status
+
 - **Overall Status**: **Ready to Demo (Hackathon Prototype)**
 - **Verification Evidence**:
   - `npm run lint`: 0 errors, 0 warnings.
@@ -259,6 +274,7 @@ Phase 6 completes the final acceptance audit, resolves static analysis and edge-
   - Live local dev server running smoothly on `http://localhost:3000`.
 
 ### Critical Fixes Completed in Phase 6
+
 1. **Deterministic Report Fallback on Missing API Key (`/api/discussion/report/route.ts`)**:
    - Implemented `createDeterministicStudentReport()` to ensure that when `GEMINI_API_KEY` is not configured, the report endpoint does not error out with `success: false`. Instead, it generates a transparent, deterministic qualitative evaluation with `modelUsed: 'deterministic-rules'` referencing verbatim student turns.
    - Fixed `DimensionRating` type conformance (`'Strength' | 'Developing' | 'Needs practice' | 'Not observed'`).
@@ -275,33 +291,36 @@ Phase 6 completes the final acceptance audit, resolves static analysis and edge-
 
 ### Verification Results Summary
 
-| Suite / Command | Execution Command | Result |
-| :--- | :--- | :--- |
-| **ESLint** | `npm run lint` | **Passed** (0 errors, 0 warnings) |
-| **Acceptance Suite** | `npm run verify` | **Passed** (19 / 19 checks passing) |
-| **Golden Path Suite** | `npm run test:golden` | **Passed** (10 / 10 steps verified) |
-| **Production Build** | `npm run build` | **Passed** (Static & Dynamic routes compiled) |
-| **Discussion Config API** | `curl http://localhost:3000/api/discussion/config` | **Passed** (HTTP 200, valid JSON) |
-| **Speech Config API** | `curl http://localhost:3000/api/speech/config` | **Passed** (HTTP 200, 6 voices listed) |
+| Suite / Command           | Execution Command                                          | Result                                          |
+| :------------------------ | :--------------------------------------------------------- | :---------------------------------------------- |
+| **ESLint**                | `npm run lint`                                             | **Passed** (0 errors, 0 warnings)               |
+| **Acceptance Suite**      | `npm run verify`                                           | **Passed** (19 / 19 checks passing)             |
+| **Golden Path Suite**     | `npm run test:golden`                                      | **Passed** (10 / 10 steps verified)             |
+| **Production Build**      | `npm run build`                                            | **Passed** (Static & Dynamic routes compiled)   |
+| **Discussion Config API** | `curl http://localhost:3000/api/discussion/config`         | **Passed** (HTTP 200, valid JSON)               |
+| **Speech Config API**     | `curl http://localhost:3000/api/speech/config`             | **Passed** (HTTP 200, 6 voices listed)          |
 | **Report Generation API** | `curl -X POST http://localhost:3000/api/discussion/report` | **Passed** (HTTP 200, verified report returned) |
 
 ### Exact Launch Command
+
 ```bash
 # Launch Next.js web application and Voice Gateway concurrently
 npm run dev
 ```
+
 Access the application at [http://localhost:3000](http://localhost:3000).
 
 ### Remaining Blockers & Manual Preflight Checks
+
 - **Cloud API Keys**: Live cloud generation via Gemini (`gemini-2.5-flash`) and Sarvam AI (`saaras:v4` / `bulbul:v3`) requires placing active keys into `.env.local`. When unconfigured, the application runs entirely on its deterministic debate engine and browser Web Speech APIs.
 - **Microphone Access**: The browser requires explicit permission to capture user microphone audio.
 - **Audio Autoplay**: Modern browsers block audio until the candidate clicks an initial button in the UI.
 
 ### Submission Collateral Index
+
 - **Requirements Audit Matrix**: [`REQUIREMENTS.md`](file:///Users/lalamansingh/Desktop/Azisly.ai/REQUIREMENTS.md)
 - **Project Submission Document**: [`SUBMISSION.md`](file:///Users/lalamansingh/Desktop/Azisly.ai/SUBMISSION.md)
 - **Spoken Pitch & Technical Defense**: [`PITCH.md`](file:///Users/lalamansingh/Desktop/Azisly.ai/PITCH.md)
 - **Live 3–4 Min Demonstration Script**: [`DEMO_SCRIPT.md`](file:///Users/lalamansingh/Desktop/Azisly.ai/DEMO_SCRIPT.md)
 - **Pre-Flight Technical Checklist**: [`HACKATHON_CHECKLIST.md`](file:///Users/lalamansingh/Desktop/Azisly.ai/HACKATHON_CHECKLIST.md)
 - **Main Readme & Setup Guide**: [`README.md`](file:///Users/lalamansingh/Desktop/Azisly.ai/README.md)
-

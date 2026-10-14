@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useSession } from '@/context/SessionContext';
-import { ParticipantCard } from './ParticipantCard';
-import { TranscriptView } from './TranscriptView';
-import { CoachingNudgeArea } from './CoachingNudgeArea';
-import { LiveCaptionsBar } from './LiveCaptionsBar';
+import React, { useState, useEffect } from "react";
+import { useSession } from "@/context/SessionContext";
+import { ParticipantCard } from "./ParticipantCard";
+import { TranscriptView } from "./TranscriptView";
+import { CoachingNudgeArea } from "./CoachingNudgeArea";
+import { LiveCaptionsBar } from "./LiveCaptionsBar";
 import {
   Play,
   Pause,
@@ -23,8 +23,8 @@ import {
   Zap,
   CornerDownRight,
   Volume2,
-  VolumeX
-} from 'lucide-react';
+  VolumeX,
+} from "lucide-react";
 
 export function DiscussionRoom() {
   const {
@@ -43,24 +43,28 @@ export function DiscussionRoom() {
     interruptCurrentSpeaker,
     setMicMuted,
     unlockAudio,
-    turnCounts
+    turnCounts,
   } = useSession();
 
-  const [composerText, setComposerText] = useState('');
+  const [composerText, setComposerText] = useState("");
 
-  const remainingSeconds = Math.max(0, state.totalDurationSeconds - state.elapsedSeconds);
+  const remainingSeconds = Math.max(
+    0,
+    state.totalDurationSeconds - state.elapsedSeconds,
+  );
   const mins = Math.floor(remainingSeconds / 60);
   const secs = remainingSeconds % 60;
-  const timeFormatted = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const timeFormatted = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 
-  const student = state.participants.find((p) => p.role === 'student');
-  const moderator = state.participants.find((p) => p.role === 'moderator');
-  const aiParticipants = state.participants.filter((p) => p.role === 'ai_participant');
+  const student = state.participants.find((p) => p.role === "student");
+  const moderator = state.participants.find((p) => p.role === "moderator");
+  const aiParticipants = state.participants.filter(
+    (p) => p.role === "ai_participant",
+  );
 
-  const activeSpeaker =
-    state.activeSpeakerId
-      ? state.participants.find((p) => p.id === state.activeSpeakerId) || null
-      : null;
+  const activeSpeaker = state.activeSpeakerId
+    ? state.participants.find((p) => p.id === state.activeSpeakerId) || null
+    : null;
 
   const generatingSpeaker = state.generatingSpeakerId
     ? state.participants.find((p) => p.id === state.generatingSpeakerId) || null
@@ -71,41 +75,60 @@ export function DiscussionRoom() {
     if (!composerText.trim()) return;
 
     submitStudentTurn(composerText);
-    setComposerText('');
+    setComposerText("");
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
 
-      if (e.code === 'Space' && state.activeSpeakerId && state.activeSpeakerId !== student?.id) {
+      if (
+        e.code === "Space" &&
+        state.activeSpeakerId &&
+        state.activeSpeakerId !== student?.id
+      ) {
         e.preventDefault();
         interruptCurrentSpeaker();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [state.activeSpeakerId, student?.id, interruptCurrentSpeaker]);
 
   // Phase badge styles
   const getPhaseBadge = () => {
     switch (state.phase) {
-      case 'opening':
-        return { label: 'Phase: Moderator Opening', color: 'bg-zinc-900 text-zinc-300 border-zinc-800' };
-      case 'discussion':
-        return { label: 'Phase: Open Discussion', color: 'bg-zinc-900 text-zinc-100 border-zinc-700' };
-      case 'closing':
-        return { label: 'Phase: Closing Round', color: 'bg-zinc-900 text-amber-300 border-zinc-800' };
-      case 'completed':
-        return { label: 'Phase: Session Completed', color: 'bg-zinc-900 text-zinc-400 border-zinc-800' };
+      case "opening":
+        return {
+          label: "Phase: Moderator Opening",
+          color: "bg-zinc-900 text-zinc-300 border-zinc-800",
+        };
+      case "discussion":
+        return {
+          label: "Phase: Open Discussion",
+          color: "bg-zinc-900 text-zinc-100 border-zinc-700",
+        };
+      case "closing":
+        return {
+          label: "Phase: Closing Round",
+          color: "bg-zinc-900 text-amber-300 border-zinc-800",
+        };
+      case "completed":
+        return {
+          label: "Phase: Session Completed",
+          color: "bg-zinc-900 text-zinc-400 border-zinc-800",
+        };
       default:
-        return { label: 'Phase: Initializing', color: 'bg-zinc-900 text-zinc-400 border-zinc-800' };
+        return {
+          label: "Phase: Initializing",
+          color: "bg-zinc-900 text-zinc-400 border-zinc-800",
+        };
     }
   };
 
   const phaseBadge = getPhaseBadge();
-  const isVoiceMode = state.interactionMode === 'voice';
+  const isVoiceMode = state.interactionMode === "voice";
 
   return (
     <div className="min-h-screen bg-[#0c0c0e] text-zinc-100 flex flex-col justify-between">
@@ -123,11 +146,15 @@ export function DiscussionRoom() {
                   GD Arena
                 </span>
 
-                {/* Honest Engine Mode Badge */}
-                {state.engineMode === 'ai' ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-300 border border-zinc-800 text-[11px] font-medium tracking-wide">
-                    <Zap className="w-3 h-3 text-zinc-400" />
-                    <span>AI Live (Groq + Gemini)</span>
+                {/* Engine Mode Badge */}
+                {state.engineMode === "ai" ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 text-[11px] font-medium tracking-wide">
+                    <Zap className="w-3 h-3 text-emerald-400" />
+                    <span>
+                      {isVoiceMode
+                        ? "Gemini 3.8 Live (Speech-to-Speech <800ms)"
+                        : "AI Live (Groq + Gemini)"}
+                    </span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800 text-[11px] font-medium tracking-wide">
@@ -148,7 +175,9 @@ export function DiscussionRoom() {
                   )}
                 </span>
 
-                <span className={`px-2.5 py-0.5 rounded-full border text-[11px] font-medium ${phaseBadge.color}`}>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full border text-[11px] font-medium ${phaseBadge.color}`}
+                >
                   {phaseBadge.label}
                 </span>
 
@@ -171,8 +200,8 @@ export function DiscussionRoom() {
             <div
               className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border font-mono text-sm ${
                 remainingSeconds < 60
-                  ? 'bg-red-950/40 text-red-300 border-red-800/60'
-                  : 'bg-[#141417] text-zinc-200 border-[#27272a]'
+                  ? "bg-red-950/40 text-red-300 border-red-800/60"
+                  : "bg-[#141417] text-zinc-200 border-[#27272a]"
               }`}
             >
               <Clock className="w-3.5 h-3.5 text-zinc-400" />
@@ -190,12 +219,18 @@ export function DiscussionRoom() {
                 onClick={() => setMicMuted(!state.isMicMuted)}
                 className={`p-2 rounded-xl border text-xs transition ${
                   state.isMicMuted
-                    ? 'bg-red-950/50 text-red-300 border-red-800/60'
-                    : 'bg-zinc-900 text-zinc-200 border-zinc-800 hover:bg-zinc-800'
+                    ? "bg-red-950/50 text-red-300 border-red-800/60"
+                    : "bg-zinc-900 text-zinc-200 border-zinc-800 hover:bg-zinc-800"
                 }`}
-                title={state.isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
+                title={
+                  state.isMicMuted ? "Unmute microphone" : "Mute microphone"
+                }
               >
-                {state.isMicMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {state.isMicMuted ? (
+                  <MicOff className="w-4 h-4" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
               </button>
             )}
 
@@ -223,7 +258,7 @@ export function DiscussionRoom() {
             )}
 
             {/* Jump to Closing — Demo Button */}
-            {state.phase !== 'closing' && state.phase !== 'completed' && (
+            {state.phase !== "closing" && state.phase !== "completed" && (
               <button
                 onClick={jumpToClosing}
                 id="jump-to-closing-btn"
@@ -241,10 +276,14 @@ export function DiscussionRoom() {
               onClick={toggleCaptions}
               className={`p-2 rounded-xl border text-xs transition ${
                 state.isCaptionsVisible
-                  ? 'bg-zinc-800 text-white border-zinc-700'
-                  : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                  ? "bg-zinc-800 text-white border-zinc-700"
+                  : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
               }`}
-              title={state.isCaptionsVisible ? 'Hide transcript pane' : 'Show transcript pane'}
+              title={
+                state.isCaptionsVisible
+                  ? "Hide transcript pane"
+                  : "Show transcript pane"
+              }
             >
               <Subtitles className="w-4 h-4" />
             </button>
@@ -268,7 +307,10 @@ export function DiscussionRoom() {
         <div className="bg-[#141417] border-b border-[#27272a] text-zinc-300 px-4 py-2.5 text-xs flex items-center justify-between max-w-7xl mx-auto w-full">
           <div className="flex items-center gap-2">
             <VolumeX className="w-4 h-4 text-zinc-400 shrink-0" />
-            <span>Browser audio playback was blocked by autoplay policy. Click button to enable audio.</span>
+            <span>
+              Browser audio playback was blocked by autoplay policy. Click
+              button to enable audio.
+            </span>
           </div>
           <button
             onClick={unlockAudio}
@@ -286,7 +328,8 @@ export function DiscussionRoom() {
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-zinc-400 shrink-0" />
             <span>
-              Session recovered from localStorage. Currently paused. Click &quot;Resume&quot; above to continue simulation.
+              Session recovered from localStorage. Currently paused. Click
+              &quot;Resume&quot; above to continue simulation.
             </span>
           </div>
           <button
@@ -305,8 +348,12 @@ export function DiscussionRoom() {
             <div className="flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-white">AI Discussion Generation Alert</p>
-                <p className="text-red-300 text-xs mt-0.5">{state.errorState.message}</p>
+                <p className="font-semibold text-white">
+                  AI Discussion Generation Alert
+                </p>
+                <p className="text-red-300 text-xs mt-0.5">
+                  {state.errorState.message}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -336,7 +383,9 @@ export function DiscussionRoom() {
             <div className="flex items-center gap-2">
               <Sparkles className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
               <span>
-                <strong>Your turn to enter!</strong> The panel has paused after recent turns to give you speaking room. Speak into your mic or type below.
+                <strong>Your turn to enter!</strong> The panel has paused after
+                recent turns to give you speaking room. Speak into your mic or
+                type below.
               </span>
             </div>
           </div>
@@ -348,7 +397,10 @@ export function DiscussionRoom() {
         {/* Left Section: Panel Cards & Coaching Nudge (7 cols) */}
         <section className="lg:col-span-7 space-y-4">
           {/* Coaching Nudge Banner (Reserved area for Phase 4) */}
-          <CoachingNudgeArea activeSpeaker={activeSpeaker} phase={state.phase} />
+          <CoachingNudgeArea
+            activeSpeaker={activeSpeaker}
+            phase={state.phase}
+          />
 
           {/* Moderator Card (Separate Card) */}
           {moderator && (
@@ -356,7 +408,10 @@ export function DiscussionRoom() {
               <ParticipantCard
                 participant={moderator}
                 isSpeaking={state.activeSpeakerId === moderator.id}
-                isThinking={state.isGenerating && state.generatingSpeakerId === moderator.id}
+                isThinking={
+                  state.isGenerating &&
+                  state.generatingSpeakerId === moderator.id
+                }
                 turnCount={turnCounts[moderator.id] || 0}
                 isVoiceMode={isVoiceMode}
               />
@@ -371,10 +426,16 @@ export function DiscussionRoom() {
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-zinc-400">
-                  Mode: <span className="font-semibold text-zinc-200 uppercase">{state.engineMode}</span>
+                  Mode:{" "}
+                  <span className="font-semibold text-zinc-200 uppercase">
+                    {state.engineMode}
+                  </span>
                 </span>
                 <span className="text-[11px] text-zinc-400">
-                  • Patience: <span className="capitalize text-zinc-200 font-medium">{state.config.patience}</span>
+                  • Patience:{" "}
+                  <span className="capitalize text-zinc-200 font-medium">
+                    {state.config.patience}
+                  </span>
                 </span>
               </div>
             </div>
@@ -385,7 +446,9 @@ export function DiscussionRoom() {
                   key={p.id}
                   participant={p}
                   isSpeaking={state.activeSpeakerId === p.id}
-                  isThinking={state.isGenerating && state.generatingSpeakerId === p.id}
+                  isThinking={
+                    state.isGenerating && state.generatingSpeakerId === p.id
+                  }
                   turnCount={turnCounts[p.id] || 0}
                   isVoiceMode={isVoiceMode}
                 />
@@ -401,9 +464,9 @@ export function DiscussionRoom() {
                   Your Candidate Position
                 </span>
                 <span className="text-[11px] text-zinc-500">
-                  {state.voiceFlowState === 'student_speaking'
-                    ? 'Speaking now (mic active)'
-                    : 'Ready to contribute'}
+                  {state.voiceFlowState === "student_speaking"
+                    ? "Speaking now (mic active)"
+                    : "Ready to contribute"}
                 </span>
               </div>
               <ParticipantCard
@@ -449,7 +512,9 @@ export function DiscussionRoom() {
                 {isVoiceMode ? (
                   <>
                     <Mic className="w-3.5 h-3.5 text-zinc-300 animate-pulse" />
-                    <span>Live speech capture active. Speak anytime or type below.</span>
+                    <span>
+                      Live speech capture active. Speak anytime or type below.
+                    </span>
                   </>
                 ) : (
                   <>
@@ -459,53 +524,58 @@ export function DiscussionRoom() {
                 )}
               </span>
 
-              {state.phase === 'closing' && !state.studentHasSpokenInClosing && (
-                <button
-                  type="button"
-                  onClick={skipStudentClosing}
-                  className="text-amber-400 hover:text-amber-300 underline text-[11px] flex items-center gap-0.5"
-                >
-                  <CornerDownRight className="w-3 h-3" />
-                  <span>Skip my closing</span>
-                </button>
-              )}
+              {state.phase === "closing" &&
+                !state.studentHasSpokenInClosing && (
+                  <button
+                    type="button"
+                    onClick={skipStudentClosing}
+                    className="text-amber-400 hover:text-amber-300 underline text-[11px] flex items-center gap-0.5"
+                  >
+                    <CornerDownRight className="w-3 h-3" />
+                    <span>Skip my closing</span>
+                  </button>
+                )}
             </div>
 
             {/* Composer Form */}
-            <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+            <form
+              onSubmit={handleSendMessage}
+              className="flex items-center gap-2"
+            >
               <input
                 type="text"
                 id="student-text-composer"
                 value={composerText}
                 onChange={(e) => setComposerText(e.target.value)}
                 placeholder={
-                  state.phase === 'closing'
-                    ? 'Type your concluding summary here...'
+                  state.phase === "closing"
+                    ? "Type your concluding summary here..."
                     : isVoiceMode
-                    ? 'Speak into mic, or type your perspective here...'
-                    : 'Share your perspective or challenge a point...'
+                      ? "Speak into mic, or type your perspective here..."
+                      : "Share your perspective or challenge a point..."
                 }
-                disabled={state.phase === 'completed'}
+                disabled={state.phase === "completed"}
                 className="flex-1 rounded-xl bg-[#0c0c0e] border border-[#27272a] px-3.5 py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 disabled:opacity-50"
               />
 
               {/* Interrupt / Take Floor quick button */}
-              {state.activeSpeakerId && state.activeSpeakerId !== student?.id && (
-                <button
-                  type="button"
-                  onClick={interruptCurrentSpeaker}
-                  className="px-3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-zinc-800 text-xs font-semibold transition flex items-center gap-1 shrink-0"
-                  title="Interrupt current speaker immediately"
-                >
-                  <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Interrupt</span>
-                </button>
-              )}
+              {state.activeSpeakerId &&
+                state.activeSpeakerId !== student?.id && (
+                  <button
+                    type="button"
+                    onClick={interruptCurrentSpeaker}
+                    className="px-3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-zinc-800 text-xs font-semibold transition flex items-center gap-1 shrink-0"
+                    title="Interrupt current speaker immediately"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">Interrupt</span>
+                  </button>
+                )}
 
               <button
                 type="submit"
                 id="send-student-turn-btn"
-                disabled={!composerText.trim() || state.phase === 'completed'}
+                disabled={!composerText.trim() || state.phase === "completed"}
                 className="px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white disabled:opacity-40 disabled:hover:bg-zinc-100 text-zinc-950 font-bold text-xs transition flex items-center gap-1.5 shrink-0"
               >
                 <span>Send</span>
@@ -514,7 +584,11 @@ export function DiscussionRoom() {
             </form>
 
             <div className="flex items-center justify-between text-[10px] text-zinc-500 px-1">
-              <span>{isVoiceMode ? 'Mic VAD active • Press Enter to submit text' : 'Press Enter or Send to speak'}</span>
+              <span>
+                {isVoiceMode
+                  ? "Mic VAD active • Press Enter to submit text"
+                  : "Press Enter or Send to speak"}
+              </span>
               <span>Candidate speech interrupts AI playback immediately</span>
             </div>
           </div>

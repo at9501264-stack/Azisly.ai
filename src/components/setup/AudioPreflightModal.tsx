@@ -1,8 +1,19 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, AlertCircle, Headphones, CheckCircle2, ShieldCheck, Sparkles, ArrowRight } from 'lucide-react';
-import { audioPlaybackService } from '@/services/audio/audioPlaybackService';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Mic,
+  MicOff,
+  Volume2,
+  AlertCircle,
+  Headphones,
+  CheckCircle2,
+  ShieldCheck,
+  Sparkles,
+  ArrowRight,
+} from "lucide-react";
+import { audioPlaybackService } from "@/services/audio/audioPlaybackService";
+import { pcmAudioPlayer } from "@/services/audio/pcmAudioPlayer";
 
 interface AudioPreflightModalProps {
   isOpen: boolean;
@@ -15,11 +26,13 @@ export function AudioPreflightModal({
   isOpen,
   onClose,
   onConfirmVoiceMode,
-  onSwitchToTextMode
+  onSwitchToTextMode,
 }: Readonly<AudioPreflightModalProps>) {
-  const [permissionState, setPermissionState] = useState<'prompt' | 'requesting' | 'granted' | 'denied' | 'error' | 'unsupported'>('prompt');
+  const [permissionState, setPermissionState] = useState<
+    "prompt" | "requesting" | "granted" | "denied" | "error" | "unsupported"
+  >("prompt");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [deviceName, setDeviceName] = useState<string>('Default Microphone');
+  const [deviceName, setDeviceName] = useState<string>("Default Microphone");
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
   const [isTestTonePlaying, setIsTestTonePlaying] = useState<boolean>(false);
 
@@ -46,12 +59,17 @@ export function AudioPreflightModal({
 
   const requestMicrophoneAccess = useCallback(async () => {
     cleanupAudio();
-    setPermissionState('requesting');
+    setPermissionState("requesting");
     setErrorMessage(null);
 
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setPermissionState('unsupported');
-      setErrorMessage('Your browser does not support standard microphone media capture.');
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      setPermissionState("unsupported");
+      setErrorMessage(
+        "Your browser does not support standard microphone media capture.",
+      );
       return;
     }
 
@@ -60,20 +78,23 @@ export function AudioPreflightModal({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
-        }
+          autoGainControl: true,
+        },
       });
 
       streamRef.current = stream;
 
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
-        setDeviceName(audioTrack.label || 'Default Microphone');
+        setDeviceName(audioTrack.label || "Default Microphone");
       }
 
       // AudioContext analyser for volume meter
-      const audioCtx = new (window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const audioCtx = new (
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext
+      )();
       audioContextRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
@@ -100,23 +121,34 @@ export function AudioPreflightModal({
       };
 
       updateMeter();
-      setPermissionState('granted');
+      setPermissionState("granted");
 
       // Auto-unlock audio playback
       await audioPlaybackService.unlockAudio();
+      await pcmAudioPlayer.unlock();
     } catch (err: unknown) {
       const error = err as { name?: string; message?: string };
-      console.warn('Microphone access rejected:', error);
+      console.warn("Microphone access rejected:", error);
 
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        setPermissionState('denied');
-        setErrorMessage('Microphone access was denied. Please allow microphone permissions in your browser address bar.');
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        setPermissionState('error');
-        setErrorMessage('No microphone device found on this system.');
+      if (
+        error.name === "NotAllowedError" ||
+        error.name === "PermissionDeniedError"
+      ) {
+        setPermissionState("denied");
+        setErrorMessage(
+          "Microphone access was denied. Please allow microphone permissions in your browser address bar.",
+        );
+      } else if (
+        error.name === "NotFoundError" ||
+        error.name === "DevicesNotFoundError"
+      ) {
+        setPermissionState("error");
+        setErrorMessage("No microphone device found on this system.");
       } else {
-        setPermissionState('error');
-        setErrorMessage(`Microphone error: ${error.message || 'Unknown device error'}`);
+        setPermissionState("error");
+        setErrorMessage(
+          `Microphone error: ${error.message || "Unknown device error"}`,
+        );
       }
     }
   }, [cleanupAudio]);
@@ -124,14 +156,18 @@ export function AudioPreflightModal({
   const handleTestTone = async () => {
     setIsTestTonePlaying(true);
     await audioPlaybackService.unlockAudio();
+    await pcmAudioPlayer.unlock();
 
     try {
-      const audioCtx = new (window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const audioCtx = new (
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext
+      )();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
 
-      osc.type = 'sine';
+      osc.type = "sine";
       osc.frequency.setValueAtTime(440, audioCtx.currentTime); // 440 Hz (A4)
       gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
@@ -152,14 +188,14 @@ export function AudioPreflightModal({
 
   const handleCancelModal = () => {
     cleanupAudio();
-    setPermissionState('prompt');
+    setPermissionState("prompt");
     setErrorMessage(null);
     onClose();
   };
 
   useEffect(() => {
     let active = true;
-    if (isOpen && permissionState === 'prompt') {
+    if (isOpen && permissionState === "prompt") {
       const timer = setTimeout(() => {
         if (active) {
           void requestMicrophoneAccess();
@@ -198,8 +234,12 @@ export function AudioPreflightModal({
               <Mic className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-base text-white">Audio & Voice Preflight</h3>
-              <p className="text-xs text-zinc-400">Verify your microphone and speakers before practice</p>
+              <h3 className="font-semibold text-base text-white">
+                Audio & Voice Preflight
+              </h3>
+              <p className="text-xs text-zinc-400">
+                Verify your microphone and speakers before practice
+              </p>
             </div>
           </div>
           <button
@@ -219,12 +259,15 @@ export function AudioPreflightModal({
               <span>Voice Processing Disclosure</span>
             </div>
             <p className="text-zinc-400 leading-relaxed">
-              Your audio will be streamed in real-time to speech recognition services for live transcription.
-              No raw audio recordings are permanently stored or shared.
+              Your audio will be streamed in real-time to speech recognition
+              services for live transcription. No raw audio recordings are
+              permanently stored or shared.
             </p>
             <div className="flex items-center gap-2 text-zinc-400 pt-1 border-t border-[#27272a]">
               <Headphones className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-              <span>Recommended: Wear headphones to prevent AI voice loopback.</span>
+              <span>
+                Recommended: Wear headphones to prevent AI voice loopback.
+              </span>
             </div>
           </div>
 
@@ -232,7 +275,7 @@ export function AudioPreflightModal({
           <div className="p-4 rounded-xl bg-[#101013] border border-[#27272a] space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium text-zinc-200 flex items-center gap-2">
-                {permissionState === 'granted' ? (
+                {permissionState === "granted" ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 ) : (
                   <MicOff className="w-4 h-4 text-zinc-400" />
@@ -240,11 +283,11 @@ export function AudioPreflightModal({
                 <span>Microphone Status</span>
               </div>
               <span className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
-                {permissionState === 'granted' ? 'Connected' : permissionState}
+                {permissionState === "granted" ? "Connected" : permissionState}
               </span>
             </div>
 
-            {permissionState === 'prompt' && (
+            {permissionState === "prompt" && (
               <div className="text-center py-4 space-y-3">
                 <p className="text-xs text-zinc-400">
                   Click below to grant temporary microphone access.
@@ -259,13 +302,13 @@ export function AudioPreflightModal({
               </div>
             )}
 
-            {permissionState === 'requesting' && (
+            {permissionState === "requesting" && (
               <div className="text-center py-4 text-xs text-zinc-300 animate-pulse">
                 Requesting microphone permission from browser...
               </div>
             )}
 
-            {permissionState === 'granted' && (
+            {permissionState === "granted" && (
               <div className="space-y-3">
                 <div className="text-xs text-zinc-400 truncate">
                   Device: <span className="text-zinc-200">{deviceName}</span>
@@ -294,17 +337,23 @@ export function AudioPreflightModal({
                     className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-lg transition cursor-pointer"
                   >
                     <Volume2 className="w-3.5 h-3.5 text-zinc-300" />
-                    <span>{isTestTonePlaying ? 'Playing chime...' : 'Play Test Tone'}</span>
+                    <span>
+                      {isTestTonePlaying
+                        ? "Playing chime..."
+                        : "Play Test Tone"}
+                    </span>
                   </button>
                 </div>
               </div>
             )}
 
-            {(permissionState === 'denied' || permissionState === 'error' || permissionState === 'unsupported') && (
+            {(permissionState === "denied" ||
+              permissionState === "error" ||
+              permissionState === "unsupported") && (
               <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-300 space-y-2">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>{errorMessage || 'Microphone error occurred.'}</span>
+                  <span>{errorMessage || "Microphone error occurred."}</span>
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button
@@ -343,7 +392,7 @@ export function AudioPreflightModal({
           <button
             onClick={async () => {
               await audioPlaybackService.unlockAudio();
-              if (permissionState === 'prompt') {
+              if (permissionState === "prompt") {
                 await requestMicrophoneAccess();
               }
               cleanupAudio();

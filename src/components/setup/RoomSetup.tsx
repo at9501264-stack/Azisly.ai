@@ -1,21 +1,21 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { PRESET_TOPICS } from '@/constants/topics';
+import React, { useState } from "react";
+import { PRESET_TOPICS } from "@/constants/topics";
 import {
   MODERATOR,
   STUDENT_PARTICIPANT,
-  getParticipantsForPanel
-} from '@/constants/participants';
+  getParticipantsForPanel,
+} from "@/constants/participants";
 import {
   RoomConfig,
   LanguagePreference,
   AIPatience,
   EngineMode,
-  InteractionMode
-} from '@/types/session';
-import { useSession } from '@/context/SessionContext';
-import { AudioPreflightModal } from './AudioPreflightModal';
+  InteractionMode,
+} from "@/types/session";
+import { useSession } from "@/context/SessionContext";
+import { AudioPreflightModal } from "./AudioPreflightModal";
 import {
   Users,
   Clock,
@@ -28,29 +28,42 @@ import {
   Bot,
   Mic,
   FileText,
-  Volume2
-} from 'lucide-react';
+  Volume2,
+} from "lucide-react";
 
 export function RoomSetup() {
-  const { state, startSession, isRestoredSession, resumeSession, resetSession } = useSession();
+  const {
+    state,
+    startSession,
+    isRestoredSession,
+    resumeSession,
+    resetSession,
+  } = useSession();
 
-  const [selectedTopicId, setSelectedTopicId] = useState<string>(PRESET_TOPICS[0].id);
+  const [selectedTopicId, setSelectedTopicId] = useState<string>(
+    PRESET_TOPICS[0].id,
+  );
   const [isCustomTopicMode, setIsCustomTopicMode] = useState<boolean>(false);
-  const [customTopicInput, setCustomTopicInput] = useState<string>('');
-  const [customTopicError, setCustomTopicError] = useState<string>('');
+  const [customTopicInput, setCustomTopicInput] = useState<string>("");
+  const [customTopicError, setCustomTopicError] = useState<string>("");
 
   const [participantCount, setParticipantCount] = useState<3 | 4 | 5>(3);
-  const [language, setLanguage] = useState<LanguagePreference>('english');
+  const [language, setLanguage] = useState<LanguagePreference>("english");
   const [durationMinutes, setDurationMinutes] = useState<5 | 8 | 10>(5);
-  const [patience, setPatience] = useState<AIPatience>('balanced');
+  const [patience, setPatience] = useState<AIPatience>("balanced");
   const [enginePreference, setEnginePreference] = useState<EngineMode>(
-    state.isAiConfigured === false ? 'demo' : 'ai'
+    state.isAiConfigured === false ? "demo" : "ai",
   );
-  const [interactionMode, setInteractionMode] = useState<InteractionMode>('voice');
-  const [isPreflightModalOpen, setIsPreflightModalOpen] = useState<boolean>(false);
+  const [interactionMode, setInteractionMode] =
+    useState<InteractionMode>("voice");
+  const [isPreflightModalOpen, setIsPreflightModalOpen] =
+    useState<boolean>(false);
 
-  const selectedPreset = PRESET_TOPICS.find((t) => t.id === selectedTopicId) || PRESET_TOPICS[0];
-  const activeTopicTitle = isCustomTopicMode ? customTopicInput.trim() : selectedPreset.title;
+  const selectedPreset =
+    PRESET_TOPICS.find((t) => t.id === selectedTopicId) || PRESET_TOPICS[0];
+  const activeTopicTitle = isCustomTopicMode
+    ? customTopicInput.trim()
+    : selectedPreset.title;
   const activeParticipants = getParticipantsForPanel(participantCount);
 
   const buildRoomConfig = (mode: InteractionMode): RoomConfig => ({
@@ -61,7 +74,7 @@ export function RoomSetup() {
     durationMinutes,
     patience,
     preferredEngine: enginePreference,
-    mode
+    mode,
   });
 
   const handleStart = (e: React.SyntheticEvent) => {
@@ -70,20 +83,24 @@ export function RoomSetup() {
     if (isCustomTopicMode) {
       const trimmed = customTopicInput.trim();
       if (!trimmed) {
-        setCustomTopicError('Please enter a valid topic name before proceeding.');
+        setCustomTopicError(
+          "Please enter a valid topic name before proceeding.",
+        );
         return;
       }
       if (trimmed.length < 5) {
-        setCustomTopicError('Topic description is too short (minimum 5 characters).');
+        setCustomTopicError(
+          "Topic description is too short (minimum 5 characters).",
+        );
         return;
       }
-      setCustomTopicError('');
+      setCustomTopicError("");
     }
 
-    if (interactionMode === 'voice') {
+    if (interactionMode === "voice") {
       setIsPreflightModalOpen(true);
     } else {
-      startSession(buildRoomConfig('text'));
+      startSession(buildRoomConfig("text"));
     }
   };
 
@@ -95,12 +112,12 @@ export function RoomSetup() {
         onClose={() => setIsPreflightModalOpen(false)}
         onConfirmVoiceMode={() => {
           setIsPreflightModalOpen(false);
-          startSession(buildRoomConfig('voice'));
+          startSession(buildRoomConfig("voice"));
         }}
         onSwitchToTextMode={() => {
           setIsPreflightModalOpen(false);
-          setInteractionMode('text');
-          startSession(buildRoomConfig('text'));
+          setInteractionMode("text");
+          startSession(buildRoomConfig("text"));
         }}
       />
 
@@ -131,13 +148,14 @@ export function RoomSetup() {
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full">
         {/* Recovered Session Alert Banner */}
-        {isRestoredSession && state.phase !== 'setup' && (
+        {isRestoredSession && state.phase !== "setup" && (
           <div className="mb-6 p-4 rounded-xl bg-zinc-900/90 border border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm">
             <div className="flex items-center gap-2.5">
               <Sparkles className="w-4 h-4 text-zinc-300 shrink-0" />
               <span className="text-zinc-300">
                 Found an active previous practice session on topic &ldquo;
-                <strong className="text-white">{state.config.topic}</strong>&rdquo; (Phase: {state.phase}).
+                <strong className="text-white">{state.config.topic}</strong>
+                &rdquo; (Phase: {state.phase}).
               </span>
             </div>
             <div className="flex items-center gap-2 self-end sm:self-auto">
@@ -169,13 +187,17 @@ export function RoomSetup() {
             Configure Your Practice Discussion
           </h1>
           <p className="text-sm text-zinc-400 max-w-2xl leading-relaxed">
-            Practice campus placement group discussions with 3 to 5 distinct AI debaters plus a faculty moderator.
-            Speak with live voice, listen to distinct personas, and practice real-time interjections.
+            Practice campus placement group discussions with 3 to 5 distinct AI
+            debaters plus a faculty moderator. Speak with live voice, listen to
+            distinct personas, and practice real-time interjections.
           </p>
         </div>
 
         {/* Setup Form Grid */}
-        <form onSubmit={handleStart} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <form
+          onSubmit={handleStart}
+          className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+        >
           {/* Left Column: Topic, Modes, & Settings (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
             {/* Topic Selection Card */}
@@ -183,19 +205,21 @@ export function RoomSetup() {
               <div className="flex items-center justify-between">
                 <label className="text-sm font-semibold text-white flex items-center gap-2">
                   <span>1. Discussion Topic</span>
-                  <span className="text-xs font-normal text-zinc-400">(Curated campus topics)</span>
+                  <span className="text-xs font-normal text-zinc-400">
+                    (Curated campus topics)
+                  </span>
                 </label>
                 <div className="flex gap-2 text-xs">
                   <button
                     type="button"
                     onClick={() => {
                       setIsCustomTopicMode(false);
-                      setCustomTopicError('');
+                      setCustomTopicError("");
                     }}
                     className={`px-3 py-1 rounded-lg border transition cursor-pointer font-medium ${
                       !isCustomTopicMode
-                        ? 'bg-zinc-100 text-zinc-950 border-zinc-200'
-                        : 'bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700'
+                        ? "bg-zinc-100 text-zinc-950 border-zinc-200"
+                        : "bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700"
                     }`}
                   >
                     Presets
@@ -205,8 +229,8 @@ export function RoomSetup() {
                     onClick={() => setIsCustomTopicMode(true)}
                     className={`px-3 py-1 rounded-lg border transition cursor-pointer font-medium ${
                       isCustomTopicMode
-                        ? 'bg-zinc-100 text-zinc-950 border-zinc-200'
-                        : 'bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700'
+                        ? "bg-zinc-100 text-zinc-950 border-zinc-200"
+                        : "bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700"
                     }`}
                   >
                     Custom Topic
@@ -226,8 +250,8 @@ export function RoomSetup() {
                           onClick={() => setSelectedTopicId(topic.id)}
                           className={`w-full text-left p-3 rounded-xl border transition flex items-start justify-between gap-3 cursor-pointer ${
                             isSelected
-                              ? 'bg-[#1c1c21] border-zinc-600 text-white'
-                              : 'bg-[#101013] border-[#27272a] hover:border-zinc-700 text-zinc-300'
+                              ? "bg-[#1c1c21] border-zinc-600 text-white"
+                              : "bg-[#101013] border-[#27272a] hover:border-zinc-700 text-zinc-300"
                           }`}
                         >
                           <div className="space-y-1 min-w-0">
@@ -235,8 +259,8 @@ export function RoomSetup() {
                               <span
                                 className={`text-[10px] font-medium px-2 py-0.5 rounded border uppercase tracking-wider ${
                                   isSelected
-                                    ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
-                                    : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                                    ? "bg-zinc-800 text-zinc-200 border-zinc-700"
+                                    : "bg-zinc-900 text-zinc-400 border-zinc-800"
                                 }`}
                               >
                                 {topic.category}
@@ -245,7 +269,9 @@ export function RoomSetup() {
                                 {topic.title}
                               </span>
                             </div>
-                            <p className="text-xs text-zinc-400 line-clamp-1">{topic.contextBrief}</p>
+                            <p className="text-xs text-zinc-400 line-clamp-1">
+                              {topic.contextBrief}
+                            </p>
                           </div>
                           {isSelected && (
                             <span className="w-2 h-2 rounded-full bg-zinc-200 shrink-0 mt-1.5" />
@@ -261,7 +287,7 @@ export function RoomSetup() {
                     value={customTopicInput}
                     onChange={(e) => {
                       setCustomTopicInput(e.target.value);
-                      if (customTopicError) setCustomTopicError('');
+                      if (customTopicError) setCustomTopicError("");
                     }}
                     placeholder="e.g. Is remote work reducing long-term innovation in tech startups?"
                     rows={3}
@@ -274,7 +300,8 @@ export function RoomSetup() {
                     </p>
                   )}
                   <p className="text-[11px] text-zinc-500">
-                    Pro-tip: Frame topics as contentious trade-offs to trigger spirited debate.
+                    Pro-tip: Frame topics as contentious trade-offs to trigger
+                    spirited debate.
                   </p>
                 </div>
               )}
@@ -290,11 +317,11 @@ export function RoomSetup() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setInteractionMode('voice')}
+                  onClick={() => setInteractionMode("voice")}
                   className={`p-3.5 rounded-xl border text-left transition flex flex-col gap-1.5 cursor-pointer ${
-                    interactionMode === 'voice'
-                      ? 'bg-[#1c1c21] border-zinc-500'
-                      : 'bg-[#101013] border-[#27272a] hover:border-zinc-700'
+                    interactionMode === "voice"
+                      ? "bg-[#1c1c21] border-zinc-500"
+                      : "bg-[#101013] border-[#27272a] hover:border-zinc-700"
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -302,24 +329,25 @@ export function RoomSetup() {
                       <Mic className="w-3.5 h-3.5 text-zinc-300" />
                       <span>Voice Mode (Recommended)</span>
                     </span>
-                    {interactionMode === 'voice' && (
+                    {interactionMode === "voice" && (
                       <span className="text-[10px] text-zinc-200 font-medium px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700">
                         Selected
                       </span>
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    Speak aloud with microphone, hear Sarvam AI debater voices, and test instant speech interruptions.
+                    Speak aloud with microphone, hear Sarvam AI debater voices,
+                    and test instant speech interruptions.
                   </p>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setInteractionMode('text')}
+                  onClick={() => setInteractionMode("text")}
                   className={`p-3.5 rounded-xl border text-left transition flex flex-col gap-1.5 cursor-pointer ${
-                    interactionMode === 'text'
-                      ? 'bg-[#1c1c21] border-zinc-500'
-                      : 'bg-[#101013] border-[#27272a] hover:border-zinc-700'
+                    interactionMode === "text"
+                      ? "bg-[#1c1c21] border-zinc-500"
+                      : "bg-[#101013] border-[#27272a] hover:border-zinc-700"
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -327,14 +355,15 @@ export function RoomSetup() {
                       <FileText className="w-3.5 h-3.5 text-zinc-400" />
                       <span>Text-Only Mode</span>
                     </span>
-                    {interactionMode === 'text' && (
+                    {interactionMode === "text" && (
                       <span className="text-[10px] text-zinc-200 font-medium px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700">
                         Selected
                       </span>
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-400 leading-relaxed">
-                    Read simulated turns on screen and submit text interjections via the composer keyboard.
+                    Read simulated turns on screen and submit text interjections
+                    via the composer keyboard.
                   </p>
                 </button>
               </div>
@@ -356,8 +385,8 @@ export function RoomSetup() {
                       onClick={() => setParticipantCount(cnt)}
                       className={`py-2 px-3 text-xs font-medium rounded-lg border transition cursor-pointer ${
                         participantCount === cnt
-                          ? 'bg-zinc-100 text-zinc-950 font-semibold border-zinc-200'
-                          : 'bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700'
+                          ? "bg-zinc-100 text-zinc-950 font-semibold border-zinc-200"
+                          : "bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700"
                       }`}
                     >
                       {cnt} AI Peers
@@ -365,9 +394,11 @@ export function RoomSetup() {
                   ))}
                 </div>
                 <p className="text-[11px] text-zinc-500 mt-2">
-                  {participantCount === 3 && 'Aarav, Meera, Kabir (+ Moderator & You)'}
-                  {participantCount === 4 && 'Adds Riya (Creative/Tangential)'}
-                  {participantCount === 5 && 'Adds Dev (Synthesizer & Diplomat)'}
+                  {participantCount === 3 &&
+                    "Aarav, Meera, Kabir (+ Moderator & You)"}
+                  {participantCount === 4 && "Adds Riya (Creative/Tangential)"}
+                  {participantCount === 5 &&
+                    "Adds Dev (Synthesizer & Diplomat)"}
                 </p>
               </div>
 
@@ -380,29 +411,31 @@ export function RoomSetup() {
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <button
                     type="button"
-                    onClick={() => setLanguage('english')}
+                    onClick={() => setLanguage("english")}
                     className={`py-2 px-3 text-xs font-medium rounded-lg border transition cursor-pointer ${
-                      language === 'english'
-                        ? 'bg-zinc-100 text-zinc-950 font-semibold border-zinc-200'
-                        : 'bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700'
+                      language === "english"
+                        ? "bg-zinc-100 text-zinc-950 font-semibold border-zinc-200"
+                        : "bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700"
                     }`}
                   >
                     English
                   </button>
                   <button
                     type="button"
-                    onClick={() => setLanguage('hinglish')}
+                    onClick={() => setLanguage("hinglish")}
                     className={`py-2 px-3 text-xs font-medium rounded-lg border transition cursor-pointer ${
-                      language === 'hinglish'
-                        ? 'bg-zinc-100 text-zinc-950 font-semibold border-zinc-200'
-                        : 'bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700'
+                      language === "hinglish"
+                        ? "bg-zinc-100 text-zinc-950 font-semibold border-zinc-200"
+                        : "bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700"
                     }`}
                   >
                     Hindi-English
                   </button>
                 </div>
                 <p className="text-[11px] text-zinc-500 mt-2">
-                  {language === 'english' ? 'Standard corporate placement English' : 'Natural Hinglish code-switching'}
+                  {language === "english"
+                    ? "Standard corporate placement English"
+                    : "Natural Hinglish code-switching"}
                 </p>
               </div>
 
@@ -420,8 +453,8 @@ export function RoomSetup() {
                       onClick={() => setDurationMinutes(mins)}
                       className={`py-2 px-3 text-xs font-medium rounded-lg border transition cursor-pointer ${
                         durationMinutes === mins
-                          ? 'bg-zinc-100 text-zinc-950 font-semibold border-zinc-200'
-                          : 'bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700'
+                          ? "bg-zinc-100 text-zinc-950 font-semibold border-zinc-200"
+                          : "bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700"
                       }`}
                     >
                       {mins} mins
@@ -440,15 +473,15 @@ export function RoomSetup() {
                   Speech Turn Patience
                 </label>
                 <div className="grid grid-cols-3 gap-2 mt-2">
-                  {(['quick', 'balanced', 'patient'] as const).map((pat) => (
+                  {(["quick", "balanced", "patient"] as const).map((pat) => (
                     <button
                       key={pat}
                       type="button"
                       onClick={() => setPatience(pat)}
                       className={`py-2 px-2 text-xs font-medium rounded-lg border capitalize transition cursor-pointer ${
                         patience === pat
-                          ? 'bg-zinc-100 text-zinc-950 font-semibold border-zinc-200'
-                          : 'bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700'
+                          ? "bg-zinc-100 text-zinc-950 font-semibold border-zinc-200"
+                          : "bg-[#101013] text-zinc-400 border-[#27272a] hover:border-zinc-700"
                       }`}
                     >
                       {pat}
@@ -456,9 +489,12 @@ export function RoomSetup() {
                   ))}
                 </div>
                 <p className="text-[11px] text-zinc-500 mt-2">
-                  {patience === 'quick' && 'Fast-paced aggressive GD (1.8s pause)'}
-                  {patience === 'balanced' && 'Standard collegiate GD rhythm (2.8s pause)'}
-                  {patience === 'patient' && 'Relaxed reflective pace (4.0s pause)'}
+                  {patience === "quick" &&
+                    "Fast-paced aggressive GD (1.8s pause)"}
+                  {patience === "balanced" &&
+                    "Standard collegiate GD rhythm (2.8s pause)"}
+                  {patience === "patient" &&
+                    "Relaxed reflective pace (4.0s pause)"}
                 </p>
               </div>
             </div>
@@ -471,52 +507,62 @@ export function RoomSetup() {
                   Discussion Generation Engine
                 </label>
                 <span className="text-[10px] text-zinc-500 font-mono">
-                  {state.isAiConfigured ? 'Groq + Gemini Active' : 'Offline Fallback'}
+                  {state.isAiConfigured
+                    ? "Groq + Gemini Active"
+                    : "Offline Fallback"}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                 <button
                   type="button"
-                  onClick={() => setEnginePreference('ai')}
+                  onClick={() => setEnginePreference("ai")}
                   className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 cursor-pointer ${
-                    enginePreference === 'ai'
-                      ? 'bg-[#1c1c21] border-zinc-500'
-                      : 'bg-[#101013] border-[#27272a] hover:border-zinc-700'
+                    enginePreference === "ai"
+                      ? "bg-[#1c1c21] border-zinc-500"
+                      : "bg-[#101013] border-[#27272a] hover:border-zinc-700"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-zinc-300" /> Live Cloud AI
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />{" "}
+                      Gemini Live Speech-to-Speech
                     </span>
-                    {enginePreference === 'ai' && (
-                      <span className="text-[10px] text-zinc-200 font-medium px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700">Active</span>
+                    {enginePreference === "ai" && (
+                      <span className="text-[10px] text-emerald-300 font-medium px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40">
+                        Active
+                      </span>
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-400">
-                    Groq ultra-fast response with Google Gemini fallback.
+                    End-to-end native Speech-to-Speech (&lt;800ms latency)
+                    without STT-LLM-TTS chaining delays.
                   </p>
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => setEnginePreference('demo')}
+                  onClick={() => setEnginePreference("demo")}
                   className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 cursor-pointer ${
-                    enginePreference === 'demo'
-                      ? 'bg-[#1c1c21] border-zinc-500'
-                      : 'bg-[#101013] border-[#27272a] hover:border-zinc-700'
+                    enginePreference === "demo"
+                      ? "bg-[#1c1c21] border-zinc-500"
+                      : "bg-[#101013] border-[#27272a] hover:border-zinc-700"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
-                      <Bot className="w-3.5 h-3.5 text-zinc-400" /> Deterministic Demo
+                      <Bot className="w-3.5 h-3.5 text-zinc-400" />{" "}
+                      Deterministic Demo
                     </span>
-                    {enginePreference === 'demo' && (
-                      <span className="text-[10px] text-zinc-200 font-medium px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700">Active</span>
+                    {enginePreference === "demo" && (
+                      <span className="text-[10px] text-zinc-200 font-medium px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700">
+                        Active
+                      </span>
                     )}
                   </div>
                   <p className="text-[11px] text-zinc-400">
-                    Scripted persona dialogue. Zero API key or network calls required.
+                    Scripted persona dialogue. Zero API key or network calls
+                    required.
                   </p>
                 </button>
               </div>
@@ -524,7 +570,10 @@ export function RoomSetup() {
               {!state.isAiConfigured && (
                 <p className="text-[11px] text-amber-400/90 mt-2 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>GROQ_API_KEY / GEMINI_API_KEY not set in .env.local. Demo mode will be used automatically.</span>
+                  <span>
+                    GROQ_API_KEY / GEMINI_API_KEY not set in .env.local. Demo
+                    mode will be used automatically.
+                  </span>
                 </p>
               )}
             </div>
@@ -534,7 +583,9 @@ export function RoomSetup() {
           <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
             <div className="p-5 sm:p-6 rounded-xl bg-[#141417] border border-[#27272a]">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-white">Selected Panel Preview</h2>
+                <h2 className="text-sm font-semibold text-white">
+                  Selected Panel Preview
+                </h2>
                 <span className="text-xs text-zinc-400 font-mono">
                   {activeParticipants.length + 2} in room
                 </span>
@@ -549,7 +600,9 @@ export function RoomSetup() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-white">{MODERATOR.name}</span>
+                        <span className="text-xs font-semibold text-white">
+                          {MODERATOR.name}
+                        </span>
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
                           Moderator
                         </span>
@@ -558,7 +611,9 @@ export function RoomSetup() {
                         <Volume2 className="w-3 h-3" /> Ratan
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-400 mt-0.5">{MODERATOR.tagline}</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {MODERATOR.tagline}
+                    </p>
                   </div>
                 </div>
 
@@ -570,7 +625,9 @@ export function RoomSetup() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-white">{STUDENT_PARTICIPANT.name}</span>
+                        <span className="text-xs font-semibold text-white">
+                          {STUDENT_PARTICIPANT.name}
+                        </span>
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
                           Candidate
                         </span>
@@ -579,7 +636,9 @@ export function RoomSetup() {
                         <Mic className="w-3 h-3" /> Live Mic
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-400 mt-0.5">{STUDENT_PARTICIPANT.tagline}</p>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {STUDENT_PARTICIPANT.tagline}
+                    </p>
                   </div>
                 </div>
 
@@ -594,21 +653,21 @@ export function RoomSetup() {
                         key={ai.id}
                         className="p-2.5 rounded-xl bg-[#101013] border border-[#27272a] flex items-start gap-3"
                       >
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 border bg-zinc-900 border-zinc-800 text-zinc-200"
-                        >
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 border bg-zinc-900 border-zinc-800 text-zinc-200">
                           {ai.initials}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-zinc-200">{ai.name}</span>
+                              <span className="text-xs font-semibold text-zinc-200">
+                                {ai.name}
+                              </span>
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800">
                                 {ai.personality}
                               </span>
                             </div>
                             <span className="text-[10px] font-mono text-zinc-500 capitalize">
-                              Voice: {ai.voice?.sarvamVoice || 'Default'}
+                              Voice: {ai.voice?.sarvamVoice || "Default"}
                             </span>
                           </div>
                           <p className="text-[11px] text-zinc-400 truncate mt-0.5">
@@ -633,13 +692,16 @@ export function RoomSetup() {
               <div className="flex items-center justify-between text-xs text-zinc-400">
                 <span>Mode:</span>
                 <span className="text-zinc-200 font-medium">
-                  {interactionMode === 'voice' ? 'Voice Practice (Mic + Voices)' : 'Text-Only Practice'}
+                  {interactionMode === "voice"
+                    ? "Voice Practice (Mic + Voices)"
+                    : "Text-Only Practice"}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs text-zinc-400">
                 <span>Format:</span>
                 <span className="text-zinc-200">
-                  {durationMinutes} min • {language === 'english' ? 'English' : 'Hinglish'}
+                  {durationMinutes} min •{" "}
+                  {language === "english" ? "English" : "Hinglish"}
                 </span>
               </div>
 
@@ -648,7 +710,7 @@ export function RoomSetup() {
                 id="enter-practice-room-btn"
                 className="w-full py-3 px-4 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-sm tracking-tight transition shadow-sm flex items-center justify-center gap-2 focus:ring-2 focus:ring-zinc-400 focus:outline-none cursor-pointer"
               >
-                {interactionMode === 'voice' ? (
+                {interactionMode === "voice" ? (
                   <>
                     <Mic className="w-4 h-4" />
                     <span>Check Mic & Enter Arena</span>
@@ -662,9 +724,9 @@ export function RoomSetup() {
               </button>
 
               <p className="text-center text-[11px] text-zinc-500">
-                {interactionMode === 'voice'
-                  ? 'Tests microphone and unlocks audio before entering'
-                  : 'Deterministic text demo mode • Instant entry with zero setup'}
+                {interactionMode === "voice"
+                  ? "Tests microphone and unlocks audio before entering"
+                  : "Deterministic text demo mode • Instant entry with zero setup"}
               </p>
             </div>
           </div>

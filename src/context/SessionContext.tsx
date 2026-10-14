@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, {
   createContext,
@@ -7,8 +7,8 @@ import React, {
   useRef,
   useState,
   useCallback,
-  useMemo
-} from 'react';
+  useMemo,
+} from "react";
 import {
   RoomConfig,
   TranscriptTurn,
@@ -18,28 +18,33 @@ import {
   EngineMode,
   RecordedSessionEvent,
   SessionEventType,
-  InteractionMode
-} from '@/types/session';
-import { TurnObjective } from '@/types/providers';
+  InteractionMode,
+} from "@/types/session";
+import { TurnObjective } from "@/types/providers";
 import {
   MODERATOR,
   STUDENT_PARTICIPANT,
-  getParticipantsForPanel
-} from '@/constants/participants';
-import { PRESET_TOPICS } from '@/constants/topics';
-import { demoDiscussionProvider } from '@/services/providers/demoDiscussionProvider';
-import { geminiDiscussionProvider } from '@/services/providers/geminiDiscussionProvider';
-import { sarvamSpeechProvider } from '@/services/providers/sarvamSpeechProvider';
-import { speechRecognitionService } from '@/services/speech/speechRecognitionService';
-import { audioPlaybackService } from '@/services/audio/audioPlaybackService';
-import { selectNextSpeaker, shouldOfferStudentOpportunity } from '@/lib/speakerSelector';
+  getParticipantsForPanel,
+} from "@/constants/participants";
+import { PRESET_TOPICS } from "@/constants/topics";
+import { demoDiscussionProvider } from "@/services/providers/demoDiscussionProvider";
+import { geminiDiscussionProvider } from "@/services/providers/geminiDiscussionProvider";
+import { sarvamSpeechProvider } from "@/services/providers/sarvamSpeechProvider";
+import { speechRecognitionService } from "@/services/speech/speechRecognitionService";
+import { speechToSpeechService } from "@/services/speech/speechToSpeechService";
+import { audioPlaybackService } from "@/services/audio/audioPlaybackService";
+import { pcmAudioPlayer } from "@/services/audio/pcmAudioPlayer";
+import {
+  selectNextSpeaker,
+  shouldOfferStudentOpportunity,
+} from "@/lib/speakerSelector";
 import {
   saveSessionToStorage,
   loadSessionFromStorage,
-  clearSessionFromStorage
-} from '@/lib/storage';
-import { SessionReport } from '@/types/report';
-import { generateTranscriptFingerprint } from '@/lib/evidenceVerifier';
+  clearSessionFromStorage,
+} from "@/lib/storage";
+import { SessionReport } from "@/types/report";
+import { generateTranscriptFingerprint } from "@/lib/evidenceVerifier";
 
 interface SessionContextType {
   state: SessionState;
@@ -71,28 +76,28 @@ const DEFAULT_CONFIG: RoomConfig = {
   topic: PRESET_TOPICS[0].title,
   isCustomTopic: false,
   participantCount: 3,
-  language: 'english',
+  language: "english",
   durationMinutes: 5,
-  patience: 'balanced',
-  preferredEngine: 'ai',
-  mode: 'voice'
+  patience: "balanced",
+  preferredEngine: "ai",
+  mode: "voice",
 };
 
 function getTurnPauseMs(patience: AIPatience): number {
-  if (patience === 'quick') return 350;
-  if (patience === 'patient') return 900;
+  if (patience === "quick") return 350;
+  if (patience === "patient") return 900;
   return 500;
 }
 
 function getStudentOpportunityPauseMs(patience: AIPatience): number {
-  if (patience === 'quick') return 3000;
-  if (patience === 'patient') return 5500;
+  if (patience === "quick") return 3000;
+  if (patience === "patient") return 5500;
   return 4000;
 }
 
 function getStudentPauseMs(patience: AIPatience): number {
-  if (patience === 'quick') return 200;
-  if (patience === 'patient') return 500;
+  if (patience === "quick") return 200;
+  if (patience === "patient") return 500;
   return 300;
 }
 
@@ -100,45 +105,45 @@ let eventSeq = 0;
 
 function createSessionEvent(
   type: SessionEventType,
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
 ): RecordedSessionEvent {
   eventSeq += 1;
   return {
     id: `ev-${Date.now()}-${eventSeq}`,
     type,
     timestampMs: Date.now(),
-    data
+    data,
   };
 }
 
 function resolveNextPhase(
   currentPhase: DiscussionPhase,
   nextSpeakerRole: string,
-  objective?: TurnObjective
+  objective?: TurnObjective,
 ): DiscussionPhase {
-  if (currentPhase === 'opening' && nextSpeakerRole === 'moderator') {
-    return 'discussion';
+  if (currentPhase === "opening" && nextSpeakerRole === "moderator") {
+    return "discussion";
   }
-  if (objective === 'summary' && currentPhase === 'closing') {
-    return 'completed';
+  if (objective === "summary" && currentPhase === "closing") {
+    return "completed";
   }
   return currentPhase;
 }
 
 function resolveInitialEngine(
   preferredEngine?: EngineMode,
-  isAiConfigured?: boolean | null
+  isAiConfigured?: boolean | null,
 ): EngineMode {
-  if (preferredEngine === 'demo' || isAiConfigured === false) {
-    return 'demo';
+  if (preferredEngine === "demo" || isAiConfigured === false) {
+    return "demo";
   }
-  return 'ai';
+  return "ai";
 }
 
 const SessionContext = createContext<SessionContextType | null>(null);
 
 export function SessionProvider({
-  children
+  children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
@@ -148,17 +153,24 @@ export function SessionProvider({
   const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const inFlightAbortRef = useRef<AbortController | null>(null);
   const studentSpeechStartRef = useRef<number>(0);
+  const pendingS2STurnRef = useRef<{
+    id: string;
+    speaker: typeof MODERATOR;
+    startTime: number;
+    objective?: TurnObjective;
+    genId: number;
+  } | null>(null);
 
   const [state, setState] = useState<SessionState>(() => {
     return {
-      phase: 'setup',
+      phase: "setup",
       isPaused: false,
       activeSpeakerId: null,
       config: DEFAULT_CONFIG,
       participants: [
         STUDENT_PARTICIPANT,
         MODERATOR,
-        ...getParticipantsForPanel(DEFAULT_CONFIG.participantCount)
+        ...getParticipantsForPanel(DEFAULT_CONFIG.participantCount),
       ],
       transcript: [],
       elapsedSeconds: 0,
@@ -167,7 +179,7 @@ export function SessionProvider({
       isCaptionsVisible: true,
       studentHasSpokenInClosing: false,
       acknowledgedStudentContribution: false,
-      engineMode: 'ai',
+      engineMode: "ai",
       isGenerating: false,
       generatingSpeakerId: null,
       errorState: null,
@@ -175,13 +187,13 @@ export function SessionProvider({
       consecutiveAiTurns: 0,
       awaitingStudentOpportunity: false,
       isAiConfigured: null,
-      interactionMode: 'voice',
-      voiceFlowState: 'idle',
-      liveCaption: '',
+      interactionMode: "voice",
+      voiceFlowState: "idle",
+      liveCaption: "",
       studentSpeakingDurationMs: 0,
       aiSpeakingDurationMs: 0,
       isAudioBlocked: false,
-      isMicMuted: false
+      isMicMuted: false,
     };
   });
 
@@ -197,11 +209,11 @@ export function SessionProvider({
 
   const currentFingerprint = useMemo(
     () => generateTranscriptFingerprint(state.transcript),
-    [state.transcript]
+    [state.transcript],
   );
 
   const isReportStale = Boolean(
-    report && report.sessionFingerprint !== currentFingerprint
+    report && report.sessionFingerprint !== currentFingerprint,
   );
 
   const clearAllTimersAndAbort = useCallback(() => {
@@ -218,6 +230,8 @@ export function SessionProvider({
       inFlightAbortRef.current = null;
     }
     sarvamSpeechProvider.stop();
+    speechToSpeechService.stop();
+    pcmAudioPlayer.stop(false);
   }, []);
 
   const bumpGeneration = useCallback(() => {
@@ -231,14 +245,14 @@ export function SessionProvider({
     let isCancelled = false;
     async function checkServerConfig() {
       try {
-        const res = await fetch('/api/discussion/config');
+        const res = await fetch("/api/discussion/config");
         if (res.ok) {
           const data = await res.json();
           if (!isCancelled) {
             setState((prev) => ({
               ...prev,
               isAiConfigured: Boolean(data.isConfigured),
-              engineMode: data.isConfigured ? 'ai' : 'demo'
+              engineMode: data.isConfigured ? "ai" : "demo",
             }));
           }
         }
@@ -247,7 +261,7 @@ export function SessionProvider({
           setState((prev) => ({
             ...prev,
             isAiConfigured: false,
-            engineMode: 'demo'
+            engineMode: "demo",
           }));
         }
       }
@@ -261,11 +275,11 @@ export function SessionProvider({
   // Load recoverable session on initial mount
   useEffect(() => {
     const saved = loadSessionFromStorage();
-    if (saved && saved.phase !== 'setup') {
+    if (saved && saved.phase !== "setup") {
       const participants = [
         STUDENT_PARTICIPANT,
         MODERATOR,
-        ...getParticipantsForPanel(saved.config.participantCount)
+        ...getParticipantsForPanel(saved.config.participantCount),
       ];
 
       setState({
@@ -281,21 +295,21 @@ export function SessionProvider({
         isCaptionsVisible: saved.isCaptionsVisible,
         studentHasSpokenInClosing: saved.studentHasSpokenInClosing,
         acknowledgedStudentContribution: false,
-        engineMode: saved.engineMode || 'demo',
+        engineMode: saved.engineMode || "demo",
         isGenerating: false,
         generatingSpeakerId: null,
         errorState: null,
-        events: saved.events || [createSessionEvent('session_resumed')],
+        events: saved.events || [createSessionEvent("session_resumed")],
         consecutiveAiTurns: 0,
         awaitingStudentOpportunity: false,
         isAiConfigured: null,
-        interactionMode: saved.interactionMode || 'voice',
-        voiceFlowState: 'paused',
-        liveCaption: '',
+        interactionMode: saved.interactionMode || "voice",
+        voiceFlowState: "paused",
+        liveCaption: "",
         studentSpeakingDurationMs: saved.studentSpeakingDurationMs || 0,
         aiSpeakingDurationMs: saved.aiSpeakingDurationMs || 0,
         isAudioBlocked: false,
-        isMicMuted: false
+        isMicMuted: false,
       });
       if (saved.report) {
         setReport(saved.report);
@@ -306,7 +320,7 @@ export function SessionProvider({
 
   // Save state updates to localStorage
   useEffect(() => {
-    if (state.phase !== 'setup') {
+    if (state.phase !== "setup") {
       saveSessionToStorage(state, report);
     }
   }, [state, report]);
@@ -315,8 +329,8 @@ export function SessionProvider({
   useEffect(() => {
     if (
       state.isPaused ||
-      state.phase === 'setup' ||
-      state.phase === 'completed' ||
+      state.phase === "setup" ||
+      state.phase === "completed" ||
       state.errorState !== null
     ) {
       if (clockIntervalRef.current) {
@@ -330,8 +344,8 @@ export function SessionProvider({
       setState((prev) => {
         if (
           prev.isPaused ||
-          prev.phase === 'setup' ||
-          prev.phase === 'completed' ||
+          prev.phase === "setup" ||
+          prev.phase === "completed" ||
           prev.errorState !== null
         ) {
           return prev;
@@ -342,30 +356,39 @@ export function SessionProvider({
         // Auto trigger closing when approaching the end of time (last 45 seconds)
         if (
           nextElapsed >= prev.totalDurationSeconds - 45 &&
-          prev.phase === 'discussion'
+          prev.phase === "discussion"
         ) {
           return {
             ...prev,
             elapsedSeconds: nextElapsed,
-            phase: 'closing',
-            events: [...prev.events, createSessionEvent('phase_changed', { phase: 'closing' })]
+            phase: "closing",
+            events: [
+              ...prev.events,
+              createSessionEvent("phase_changed", { phase: "closing" }),
+            ],
           };
         }
 
-        if (nextElapsed >= prev.totalDurationSeconds && prev.phase === 'closing') {
+        if (
+          nextElapsed >= prev.totalDurationSeconds &&
+          prev.phase === "closing"
+        ) {
           return {
             ...prev,
             elapsedSeconds: prev.totalDurationSeconds,
-            phase: 'completed',
+            phase: "completed",
             activeSpeakerId: null,
-            voiceFlowState: 'completed',
-            events: [...prev.events, createSessionEvent('phase_changed', { phase: 'completed' })]
+            voiceFlowState: "completed",
+            events: [
+              ...prev.events,
+              createSessionEvent("phase_changed", { phase: "completed" }),
+            ],
           };
         }
 
         return {
           ...prev,
-          elapsedSeconds: nextElapsed
+          elapsedSeconds: nextElapsed,
         };
       });
     }, 1000);
@@ -381,12 +404,12 @@ export function SessionProvider({
   // Active generator function supporting both Gemini and Demo fallback
   const generateTurn = useCallback(
     async (
-      speaker: (typeof state)['participants'][0],
+      speaker: (typeof state)["participants"][0],
       objective: string | undefined,
       current: SessionState,
-      abortSignal: AbortSignal
+      abortSignal: AbortSignal,
     ): Promise<TranscriptTurn> => {
-      const isDemo = current.engineMode === 'demo';
+      const isDemo = current.engineMode === "demo";
 
       if (!isDemo) {
         try {
@@ -398,7 +421,7 @@ export function SessionProvider({
             phase: current.phase,
             selectedSpeaker: speaker,
             objective: objective as TurnObjective | undefined,
-            abortSignal
+            abortSignal,
           });
 
           if (result) return result;
@@ -409,21 +432,23 @@ export function SessionProvider({
       }
 
       // Demo provider fallback
-      if (current.phase === 'opening') {
+      if (current.phase === "opening") {
         return demoDiscussionProvider.getOpeningTurn({
           config: current.config,
           participants: current.participants,
           transcript: current.transcript,
           activeSpeakerId: speaker.id,
-          phase: 'opening'
+          phase: "opening",
         });
       }
 
-      if (current.phase === 'closing') {
+      if (current.phase === "closing") {
         const isModInviting =
-          speaker.role === 'moderator' &&
+          speaker.role === "moderator" &&
           !current.transcript.some(
-            (t) => t.speakerId === MODERATOR.id && t.text.toLowerCase().includes('concluding')
+            (t) =>
+              t.speakerId === MODERATOR.id &&
+              t.text.toLowerCase().includes("concluding"),
           );
         return demoDiscussionProvider.getClosingTurn(
           {
@@ -431,26 +456,29 @@ export function SessionProvider({
             participants: current.participants,
             transcript: current.transcript,
             activeSpeakerId: speaker.id,
-            phase: 'closing'
+            phase: "closing",
           },
           speaker,
-          isModInviting
+          isModInviting,
         );
       }
 
       const lastTurn = current.transcript[current.transcript.length - 1];
-      if (lastTurn?.speakerRole === 'student' && !current.acknowledgedStudentContribution) {
+      if (
+        lastTurn?.speakerRole === "student" &&
+        !current.acknowledgedStudentContribution
+      ) {
         return demoDiscussionProvider.acknowledgeStudentContribution(
           {
             config: current.config,
             participants: current.participants,
             transcript: current.transcript,
             activeSpeakerId: speaker.id,
-            phase: 'discussion',
-            lastStudentTurn: lastTurn
+            phase: "discussion",
+            lastStudentTurn: lastTurn,
           },
           speaker,
-          lastTurn
+          lastTurn,
         );
       }
 
@@ -459,7 +487,7 @@ export function SessionProvider({
         participants: current.participants,
         transcript: current.transcript,
         activeSpeakerId: speaker.id,
-        phase: 'discussion'
+        phase: "discussion",
       });
 
       return (
@@ -470,26 +498,32 @@ export function SessionProvider({
           speakerRole: speaker.role,
           text: `Regarding "${current.config.topic}", we must examine both opportunities and trade-offs.`,
           relativeTimestampMs: current.elapsedSeconds * 1000,
-          source: 'scripted-demo',
-          deliveryState: 'complete',
-          isDemoResponse: true
+          source: "scripted-demo",
+          deliveryState: "complete",
+          isDemoResponse: true,
         }
       );
     },
-    []
+    [],
   );
 
-  const scheduleNextTurnRef = useRef<(genId: number, delayMs: number) => void>(() => {});
+  const scheduleNextTurnRef = useRef<(genId: number, delayMs: number) => void>(
+    () => {},
+  );
 
   const triggerStudentOpportunityWindow = useCallback(
-    (genId: number, patience: AIPatience, scheduleCallback: (g: number, d: number) => void) => {
+    (
+      genId: number,
+      patience: AIPatience,
+      scheduleCallback: (g: number, d: number) => void,
+    ) => {
       setState((prev) => ({
         ...prev,
         awaitingStudentOpportunity: true,
         activeSpeakerId: null,
-        voiceFlowState: 'listening',
+        voiceFlowState: "listening",
         isGenerating: false,
-        generatingSpeakerId: null
+        generatingSpeakerId: null,
       }));
 
       const oppPause = getStudentOpportunityPauseMs(patience);
@@ -498,38 +532,47 @@ export function SessionProvider({
         setState((prev) => ({
           ...prev,
           awaitingStudentOpportunity: false,
-          consecutiveAiTurns: 0
+          consecutiveAiTurns: 0,
         }));
         scheduleCallback(genId, 1000);
       }, oppPause);
     },
-    []
+    [],
   );
 
   const handleGenerationError = useCallback(
-    (err: unknown, genId: number, scheduleCallback: (g: number, d: number) => void) => {
+    (
+      err: unknown,
+      genId: number,
+      scheduleCallback: (g: number, d: number) => void,
+    ) => {
       const isUnconfigured = Boolean(
-        err && typeof err === 'object' && 'isUnconfigured' in err && (err as { isUnconfigured?: boolean }).isUnconfigured
+        err &&
+        typeof err === "object" &&
+        "isUnconfigured" in err &&
+        (err as { isUnconfigured?: boolean }).isUnconfigured,
       );
       const errMsg =
         err instanceof Error
           ? err.message
-          : typeof err === 'string'
-          ? err
-          : 'Discussion generation error';
+          : typeof err === "string"
+            ? err
+            : "Discussion generation error";
 
-      console.warn('[Discussion generation issue]:', errMsg);
+      console.warn("[Discussion generation issue]:", errMsg);
 
       if (isUnconfigured) {
         setState((prev) => ({
           ...prev,
-          engineMode: 'demo',
+          engineMode: "demo",
           isGenerating: false,
           generatingSpeakerId: null,
           events: [
             ...prev.events,
-            createSessionEvent('switched_to_demo', { reason: 'unconfigured_key' })
-          ]
+            createSessionEvent("switched_to_demo", {
+              reason: "unconfigured_key",
+            }),
+          ],
         }));
         scheduleCallback(genId, 500);
         return;
@@ -540,18 +583,18 @@ export function SessionProvider({
         isGenerating: false,
         generatingSpeakerId: null,
         activeSpeakerId: null,
-        voiceFlowState: 'error',
+        voiceFlowState: "error",
         errorState: {
-          message: errMsg || 'Failed to generate discussion turn.',
-          retryable: true
+          message: errMsg || "Failed to generate discussion turn.",
+          retryable: true,
         },
         events: [
           ...prev.events,
-          createSessionEvent('ai_generation_failed', { error: errMsg })
-        ]
+          createSessionEvent("ai_generation_failed", { error: errMsg }),
+        ],
       }));
     },
-    []
+    [],
   );
 
   // Primary turn execution logic
@@ -560,25 +603,35 @@ export function SessionProvider({
       const current = stateRef.current;
       if (
         current.isPaused ||
-        current.phase === 'setup' ||
-        current.phase === 'completed' ||
+        current.phase === "setup" ||
+        current.phase === "completed" ||
         current.errorState !== null ||
-        current.voiceFlowState === 'student_speaking'
+        current.voiceFlowState === "student_speaking"
       ) {
         return;
       }
 
       // Check for student entry opportunity window (after at most 2 consecutive AI turns)
       if (
-        shouldOfferStudentOpportunity(current.consecutiveAiTurns, current.phase) &&
+        shouldOfferStudentOpportunity(
+          current.consecutiveAiTurns,
+          current.phase,
+        ) &&
         !current.awaitingStudentOpportunity
       ) {
-        triggerStudentOpportunityWindow(genId, current.config.patience, scheduleCallback);
+        triggerStudentOpportunityWindow(
+          genId,
+          current.config.patience,
+          scheduleCallback,
+        );
         return;
       }
 
       // Deterministically select next speaker
-      const remainingSeconds = Math.max(0, current.totalDurationSeconds - current.elapsedSeconds);
+      const remainingSeconds = Math.max(
+        0,
+        current.totalDurationSeconds - current.elapsedSeconds,
+      );
       let decision;
       try {
         decision = selectNextSpeaker({
@@ -586,29 +639,95 @@ export function SessionProvider({
           transcript: current.transcript,
           phase: current.phase,
           consecutiveAiTurns: current.consecutiveAiTurns,
-          remainingSeconds
+          remainingSeconds,
         });
       } catch (err) {
-        console.error('Speaker selection error:', err);
+        console.error("Speaker selection error:", err);
         return;
       }
 
       const nextSpeaker = decision.speaker;
 
-      // Enter thinking / generating state
+      // =======================================================================
+      // DIRECT SPEECH-TO-SPEECH (S2S) EXECUTION PATH (<800ms Latency)
+      // =======================================================================
+      const isVoiceMode = current.interactionMode === "voice";
+      const isS2SActive =
+        isVoiceMode &&
+        current.engineMode === "ai" &&
+        speechToSpeechService.getIsConnected();
+
+      if (isS2SActive) {
+        const pendingTurnId = `turn-${nextSpeaker.id}-${Date.now()}`;
+        const speechStartTime = Date.now();
+
+        pendingS2STurnRef.current = {
+          id: pendingTurnId,
+          speaker: nextSpeaker,
+          startTime: speechStartTime,
+          objective: decision.objective,
+          genId,
+        };
+
+        setState((prev) => ({
+          ...prev,
+          isGenerating: true,
+          generatingSpeakerId: nextSpeaker.id,
+          activeSpeakerId: null,
+          voiceFlowState: "thinking",
+          events: [
+            ...prev.events,
+            createSessionEvent("ai_generation_started", {
+              speakerId: nextSpeaker.id,
+              engineMode: "s2s",
+            }),
+          ],
+          transcript: [
+            ...prev.transcript,
+            {
+              id: pendingTurnId,
+              speakerId: nextSpeaker.id,
+              speakerName: nextSpeaker.name,
+              speakerRole: nextSpeaker.role,
+              text: "",
+              relativeTimestampMs: prev.elapsedSeconds * 1000,
+              source: "model",
+              deliveryState: "in-progress",
+              deliveryStatus: "unplayed",
+            },
+          ],
+        }));
+
+        const recentRemarks = current.transcript
+          .slice(-3)
+          .map((t) => `${t.speakerName}: "${t.deliveredText || t.text}"`)
+          .join("\n");
+
+        const instruction = `[Turn for ${nextSpeaker.name} (${nextSpeaker.role}, persona: ${nextSpeaker.personality})]:
+Topic: "${current.config.topic}".
+Objective: ${decision.objective || "Present perspective"}.
+Recent remarks in discussion:
+${recentRemarks || "None yet; this is the opening of the discussion."}
+Deliver a concise, punchy 1-2 sentence response directly addressing recent remarks. Speak immediately.`;
+
+        speechToSpeechService.triggerAiTurn(nextSpeaker, instruction);
+        return;
+      }
+
+      // Fallback: Chained STT / LLM / TTS path
       setState((prev) => ({
         ...prev,
         isGenerating: true,
         generatingSpeakerId: nextSpeaker.id,
         activeSpeakerId: null,
-        voiceFlowState: 'thinking',
+        voiceFlowState: "thinking",
         events: [
           ...prev.events,
-          createSessionEvent('ai_generation_started', {
+          createSessionEvent("ai_generation_started", {
             speakerId: nextSpeaker.id,
-            engineMode: prev.engineMode
-          })
-        ]
+            engineMode: prev.engineMode,
+          }),
+        ],
       }));
 
       // Setup AbortController for in-flight request
@@ -621,7 +740,7 @@ export function SessionProvider({
           nextSpeaker,
           decision.objective,
           current,
-          abortController.signal
+          abortController.signal,
         );
       } catch (err: unknown) {
         if (abortController.signal.aborted || generationRef.current !== genId) {
@@ -635,21 +754,23 @@ export function SessionProvider({
 
       if (generationRef.current !== genId) return;
 
-      const isVoiceMode = current.interactionMode === 'voice';
-
       // Mark generation complete
       setState((prev) => ({
         ...prev,
         isGenerating: false,
         generatingSpeakerId: null,
         activeSpeakerId: nextSpeaker.id,
-        voiceFlowState: 'ai_speaking',
+        voiceFlowState: "ai_speaking",
         consecutiveAiTurns:
-          nextSpeaker.role === 'ai_participant' ? prev.consecutiveAiTurns + 1 : 0,
+          nextSpeaker.role === "ai_participant"
+            ? prev.consecutiveAiTurns + 1
+            : 0,
         events: [
           ...prev.events,
-          createSessionEvent('ai_generation_completed', { speakerId: nextSpeaker.id })
-        ]
+          createSessionEvent("ai_generation_completed", {
+            speakerId: nextSpeaker.id,
+          }),
+        ],
       }));
 
       // Phase 3 Voice Flow vs Text Flow
@@ -665,132 +786,157 @@ export function SessionProvider({
             {
               ...generatedTurn,
               relativeTimestampMs: prev.elapsedSeconds * 1000,
-              deliveryState: 'in-progress',
-              deliveryStatus: 'unplayed'
-            }
-          ]
+              deliveryState: "in-progress",
+              deliveryStatus: "unplayed",
+            },
+          ],
         }));
 
-        const voiceId = nextSpeaker.voice?.sarvamVoice || 'ratan';
+        const voiceId = nextSpeaker.voice?.sarvamVoice || "ratan";
         const pace = nextSpeaker.voice?.pace ?? 1.0;
-        const languageCode = current.config.language === 'hinglish' ? 'hi-IN' : 'en-IN';
+        const languageCode =
+          current.config.language === "hinglish" ? "hi-IN" : "en-IN";
 
         setState((prev) => ({
           ...prev,
-          events: [...prev.events, createSessionEvent('tts_request_start', { speakerId: nextSpeaker.id, voiceId })]
+          events: [
+            ...prev.events,
+            createSessionEvent("tts_request_start", {
+              speakerId: nextSpeaker.id,
+              voiceId,
+            }),
+          ],
         }));
 
-        await sarvamSpeechProvider.synthesizeSpeech(pendingTurnId, generatedTurn.text, {
-          voiceId,
-          languageCode,
-          pace,
-          abortSignal: abortController.signal,
-          onAudioBlocked: () => {
-            setState((prev) => ({ ...prev, isAudioBlocked: true }));
-          },
-          onStart: () => {
-            if (generationRef.current !== genId) return;
-            setState((prev) => ({
-              ...prev,
-              activeSpeakerId: nextSpeaker.id,
-              voiceFlowState: 'ai_speaking',
-              events: [...prev.events, createSessionEvent('tts_playback_start', { speakerId: nextSpeaker.id })]
-            }));
-          },
-          onEnd: () => {
-            if (generationRef.current !== genId) return;
-            const durationMs = Date.now() - speechStartTime;
+        await sarvamSpeechProvider.synthesizeSpeech(
+          pendingTurnId,
+          generatedTurn.text,
+          {
+            voiceId,
+            languageCode,
+            pace,
+            abortSignal: abortController.signal,
+            onAudioBlocked: () => {
+              setState((prev) => ({ ...prev, isAudioBlocked: true }));
+            },
+            onStart: () => {
+              if (generationRef.current !== genId) return;
+              setState((prev) => ({
+                ...prev,
+                activeSpeakerId: nextSpeaker.id,
+                voiceFlowState: "ai_speaking",
+                events: [
+                  ...prev.events,
+                  createSessionEvent("tts_playback_start", {
+                    speakerId: nextSpeaker.id,
+                  }),
+                ],
+              }));
+            },
+            onEnd: () => {
+              if (generationRef.current !== genId) return;
+              const durationMs = Date.now() - speechStartTime;
 
-            setState((prev) => {
-              const isPhaseTransition = resolveNextPhase(
-                prev.phase,
-                nextSpeaker.role,
-                decision.objective
+              setState((prev) => {
+                const isPhaseTransition = resolveNextPhase(
+                  prev.phase,
+                  nextSpeaker.role,
+                  decision.objective,
+                );
+
+                return {
+                  ...prev,
+                  activeSpeakerId: null,
+                  voiceFlowState: "listening",
+                  phase: isPhaseTransition,
+                  aiSpeakingDurationMs: prev.aiSpeakingDurationMs + durationMs,
+                  transcript: prev.transcript.map((t) =>
+                    t.id === pendingTurnId
+                      ? {
+                          ...t,
+                          deliveryState: "complete",
+                          deliveryStatus: "fully_delivered",
+                          deliveredText: generatedTurn.text,
+                          playbackDurationMs: durationMs,
+                        }
+                      : t,
+                  ),
+                  events: [
+                    ...prev.events,
+                    createSessionEvent("tts_playback_complete", {
+                      speakerId: nextSpeaker.id,
+                      durationMs,
+                    }),
+                    createSessionEvent("turn_displayed", {
+                      turnId: pendingTurnId,
+                      speakerId: nextSpeaker.id,
+                    }),
+                  ],
+                };
+              });
+
+              // If moderator just finished opening, provide dedicated student opportunity window
+              const isModTurn = nextSpeaker.role === "moderator";
+              const pauseBetween = isModTurn
+                ? getStudentOpportunityPauseMs(current.config.patience)
+                : getTurnPauseMs(current.config.patience);
+
+              if (isModTurn) {
+                setState((prev) => ({
+                  ...prev,
+                  awaitingStudentOpportunity: true,
+                }));
+              }
+
+              scheduleCallback(genId, pauseBetween);
+            },
+            onInterrupted: (playedDurationMs, deliveredText) => {
+              console.log(
+                `[AudioPlayback] Turn ${pendingTurnId} interrupted after ${playedDurationMs}ms`,
               );
-
-              return {
+              setState((prev) => ({
                 ...prev,
                 activeSpeakerId: null,
-                voiceFlowState: 'listening',
-                phase: isPhaseTransition,
-                aiSpeakingDurationMs: prev.aiSpeakingDurationMs + durationMs,
+                aiSpeakingDurationMs:
+                  prev.aiSpeakingDurationMs + playedDurationMs,
                 transcript: prev.transcript.map((t) =>
                   t.id === pendingTurnId
                     ? {
                         ...t,
-                        deliveryState: 'complete',
-                        deliveryStatus: 'fully_delivered',
-                        deliveredText: generatedTurn.text,
-                        playbackDurationMs: durationMs
+                        deliveryState: "complete",
+                        deliveryStatus: "interrupted",
+                        deliveredText,
+                        playbackDurationMs: playedDurationMs,
                       }
-                    : t
+                    : t,
                 ),
                 events: [
                   ...prev.events,
-                  createSessionEvent('tts_playback_complete', { speakerId: nextSpeaker.id, durationMs }),
-                  createSessionEvent('turn_displayed', { turnId: pendingTurnId, speakerId: nextSpeaker.id })
-                ]
-              };
-            });
-
-            // If moderator just finished opening, provide dedicated student opportunity window
-            const isModTurn = nextSpeaker.role === 'moderator';
-            const pauseBetween = isModTurn
-              ? getStudentOpportunityPauseMs(current.config.patience)
-              : getTurnPauseMs(current.config.patience);
-
-            if (isModTurn) {
+                  createSessionEvent("tts_interrupted", {
+                    speakerId: nextSpeaker.id,
+                    playedDurationMs,
+                    deliveredText,
+                  }),
+                ],
+              }));
+            },
+            onError: (err) => {
+              console.warn("[TTS Playback Warning]:", err.message);
+              // Complete turn gracefully
               setState((prev) => ({
                 ...prev,
-                awaitingStudentOpportunity: true
+                activeSpeakerId: null,
+                voiceFlowState: "listening",
               }));
-            }
-
-            scheduleCallback(genId, pauseBetween);
+              scheduleCallback(genId, 1200);
+            },
           },
-          onInterrupted: (playedDurationMs, deliveredText) => {
-            console.log(`[AudioPlayback] Turn ${pendingTurnId} interrupted after ${playedDurationMs}ms`);
-            setState((prev) => ({
-              ...prev,
-              activeSpeakerId: null,
-              aiSpeakingDurationMs: prev.aiSpeakingDurationMs + playedDurationMs,
-              transcript: prev.transcript.map((t) =>
-                t.id === pendingTurnId
-                  ? {
-                      ...t,
-                      deliveryState: 'complete',
-                      deliveryStatus: 'interrupted',
-                      deliveredText,
-                      playbackDurationMs: playedDurationMs
-                    }
-                  : t
-              ),
-              events: [
-                ...prev.events,
-                createSessionEvent('tts_interrupted', {
-                  speakerId: nextSpeaker.id,
-                  playedDurationMs,
-                  deliveredText
-                })
-              ]
-            }));
-          },
-          onError: (err) => {
-            console.warn('[TTS Playback Warning]:', err.message);
-            // Complete turn gracefully
-            setState((prev) => ({
-              ...prev,
-              activeSpeakerId: null,
-              voiceFlowState: 'listening'
-            }));
-            scheduleCallback(genId, 1200);
-          }
-        });
+        );
       } else {
         // Text mode reading delay
         const readingDurationMs = Math.min(
           4600,
-          Math.max(2800, generatedTurn.text.length * 32)
+          Math.max(2800, generatedTurn.text.length * 32),
         );
 
         activeTimerRef.current = setTimeout(() => {
@@ -800,7 +946,7 @@ export function SessionProvider({
             const isPhaseTransition = resolveNextPhase(
               prev.phase,
               nextSpeaker.role,
-              decision.objective
+              decision.objective,
             );
 
             return {
@@ -812,22 +958,22 @@ export function SessionProvider({
                 {
                   ...generatedTurn,
                   relativeTimestampMs: prev.elapsedSeconds * 1000,
-                  deliveryState: 'complete',
-                  deliveryStatus: 'fully_delivered',
-                  deliveredText: generatedTurn.text
-                }
+                  deliveryState: "complete",
+                  deliveryStatus: "fully_delivered",
+                  deliveredText: generatedTurn.text,
+                },
               ],
               events: [
                 ...prev.events,
-                createSessionEvent('turn_displayed', {
+                createSessionEvent("turn_displayed", {
                   turnId: generatedTurn.id,
-                  speakerId: nextSpeaker.id
-                })
-              ]
+                  speakerId: nextSpeaker.id,
+                }),
+              ],
             };
           });
 
-          const isModTurn = nextSpeaker.role === 'moderator';
+          const isModTurn = nextSpeaker.role === "moderator";
           const pauseBetween = isModTurn
             ? getStudentOpportunityPauseMs(current.config.patience)
             : getTurnPauseMs(current.config.patience);
@@ -835,7 +981,7 @@ export function SessionProvider({
           if (isModTurn) {
             setState((prev) => ({
               ...prev,
-              awaitingStudentOpportunity: true
+              awaitingStudentOpportunity: true,
             }));
           }
 
@@ -843,7 +989,7 @@ export function SessionProvider({
         }, readingDurationMs);
       }
     },
-    [generateTurn, handleGenerationError, triggerStudentOpportunityWindow]
+    [generateTurn, handleGenerationError, triggerStudentOpportunityWindow],
   );
 
   // Main turn scheduler with clean cancellation
@@ -859,8 +1005,8 @@ export function SessionProvider({
         const current = stateRef.current;
         if (
           current.isPaused ||
-          current.phase === 'setup' ||
-          current.phase === 'completed' ||
+          current.phase === "setup" ||
+          current.phase === "completed" ||
           current.errorState !== null
         ) {
           return;
@@ -869,7 +1015,7 @@ export function SessionProvider({
         await executeNextTurn(genId, scheduleNextTurnRef.current);
       }, delayMs);
     },
-    [executeNextTurn]
+    [executeNextTurn],
   );
 
   useEffect(() => {
@@ -880,8 +1026,8 @@ export function SessionProvider({
   useEffect(() => {
     if (
       state.isPaused ||
-      state.phase === 'setup' ||
-      state.phase === 'completed' ||
+      state.phase === "setup" ||
+      state.phase === "completed" ||
       state.errorState !== null
     ) {
       if (activeTimerRef.current) {
@@ -891,7 +1037,11 @@ export function SessionProvider({
       return;
     }
 
-    if (state.activeSpeakerId || state.isGenerating || state.voiceFlowState === 'student_speaking') {
+    if (
+      state.activeSpeakerId ||
+      state.isGenerating ||
+      state.voiceFlowState === "student_speaking"
+    ) {
       return;
     }
 
@@ -909,7 +1059,7 @@ export function SessionProvider({
     state.isGenerating,
     state.voiceFlowState,
     state.errorState,
-    scheduleNextTurn
+    scheduleNextTurn,
   ]);
 
   const submitStudentTurn = useCallback(
@@ -918,11 +1068,14 @@ export function SessionProvider({
       if (!trimmed) return;
 
       const current = stateRef.current;
-      if (current.phase === 'setup' || current.phase === 'completed') return;
+      if (current.phase === "setup" || current.phase === "completed") return;
 
       // Student submission immediately cancels pending AI turn and aborts in-flight audio/generation
       const genId = bumpGeneration();
       sarvamSpeechProvider.stop();
+      speechToSpeechService.interruptCurrentSpeaker();
+      speechToSpeechService.sendStudentText(trimmed);
+      pcmAudioPlayer.stop(true);
       if (inFlightAbortRef.current) {
         inFlightAbortRef.current.abort();
       }
@@ -931,37 +1084,42 @@ export function SessionProvider({
         id: `turn-student-${Date.now()}`,
         speakerId: STUDENT_PARTICIPANT.id,
         speakerName: STUDENT_PARTICIPANT.name,
-        speakerRole: 'student',
+        speakerRole: "student",
         text: trimmed,
         deliveredText: trimmed,
-        deliveryStatus: 'fully_delivered',
+        deliveryStatus: "fully_delivered",
         relativeTimestampMs: current.elapsedSeconds * 1000,
-        source: 'student',
-        deliveryState: 'complete'
+        source: "student",
+        deliveryState: "complete",
       };
 
-      const isClosingTurn = current.phase === 'closing';
-      const nextPhase = current.phase === 'opening' ? 'discussion' : current.phase;
+      const isClosingTurn = current.phase === "closing";
+      const nextPhase =
+        current.phase === "opening" ? "discussion" : current.phase;
 
       setState((prev) => ({
         ...prev,
         phase: nextPhase,
         activeSpeakerId: STUDENT_PARTICIPANT.id,
-        voiceFlowState: 'student_speaking',
+        voiceFlowState: "student_speaking",
         isGenerating: false,
         generatingSpeakerId: null,
         errorState: null,
         transcript: [...prev.transcript, newTurn],
         generationId: genId,
-        studentHasSpokenInClosing: isClosingTurn ? true : prev.studentHasSpokenInClosing,
+        studentHasSpokenInClosing: isClosingTurn
+          ? true
+          : prev.studentHasSpokenInClosing,
         acknowledgedStudentContribution: false,
         consecutiveAiTurns: 0,
         awaitingStudentOpportunity: false,
-        liveCaption: '',
+        liveCaption: "",
         events: [
           ...prev.events,
-          createSessionEvent('student_turn_submitted', { textLength: trimmed.length })
-        ]
+          createSessionEvent("student_turn_submitted", {
+            textLength: trimmed.length,
+          }),
+        ],
       }));
 
       // Trigger next AI peer response with natural, low-latency conversational cadence
@@ -972,28 +1130,33 @@ export function SessionProvider({
         setState((prev) => ({
           ...prev,
           activeSpeakerId: null,
-          voiceFlowState: 'thinking'
+          voiceFlowState: "thinking",
         }));
 
         scheduleNextTurn(genId, 50);
       }, pauseBetween);
     },
-    [bumpGeneration, scheduleNextTurn]
+    [bumpGeneration, scheduleNextTurn],
   );
 
   // Manual interrupt / Take Floor action
   const interruptCurrentSpeaker = useCallback(() => {
     const genId = bumpGeneration();
     sarvamSpeechProvider.stop();
+    speechToSpeechService.interruptCurrentSpeaker();
+    pcmAudioPlayer.stop(true);
     if (inFlightAbortRef.current) {
       inFlightAbortRef.current.abort();
     }
     setState((prev) => ({
       ...prev,
-      phase: prev.phase === 'opening' ? 'discussion' : prev.phase,
+      phase: prev.phase === "opening" ? "discussion" : prev.phase,
       activeSpeakerId: STUDENT_PARTICIPANT.id,
-      voiceFlowState: 'student_speaking',
-      events: [...prev.events, createSessionEvent('tts_interrupted', { manual: true })]
+      voiceFlowState: "student_speaking",
+      events: [
+        ...prev.events,
+        createSessionEvent("tts_interrupted", { manual: true }),
+      ],
     }));
 
     // Safety timeout: If user clicks interrupt but doesn't speak within 7s, return floor to listening
@@ -1003,100 +1166,295 @@ export function SessionProvider({
       setState((prev) => ({
         ...prev,
         activeSpeakerId: null,
-        voiceFlowState: 'listening'
+        voiceFlowState: "listening",
       }));
       scheduleNextTurnRef.current(genId, 1200);
     }, 7000);
   }, [bumpGeneration]);
 
-  // Voice Recognition Streaming lifecycle
+  // Voice Streaming lifecycle (Speech-to-Speech primary, fallback to STT)
   useEffect(() => {
     const isLivePhase =
-      state.phase === 'opening' || state.phase === 'discussion' || state.phase === 'closing';
+      state.phase === "opening" ||
+      state.phase === "discussion" ||
+      state.phase === "closing";
 
     if (
       !isLivePhase ||
       state.isPaused ||
-      state.interactionMode !== 'voice' ||
+      state.interactionMode !== "voice" ||
       state.isMicMuted ||
       state.errorState !== null
     ) {
+      speechToSpeechService.stop();
       speechRecognitionService.stop();
       return;
     }
 
     let isSubscribed = true;
 
-    async function initSTT() {
-      await speechRecognitionService.start(
+    async function initVoice() {
+      // 1. Try native Speech-to-Speech first (Ultra-low latency Gemini Live model)
+      const s2sConnected = await speechToSpeechService.start(
         {
-          onSpeechStart: () => {
+          topic: state.config.topic,
+          language: state.config.language,
+          patience: state.config.patience,
+          initialSpeaker: state.participants.find(
+            (p) => p.role === "moderator",
+          ),
+        },
+        {
+          onStudentSpeechStart: () => {
             if (!isSubscribed) return;
             studentSpeechStartRef.current = Date.now();
+            if (inFlightAbortRef.current) inFlightAbortRef.current.abort();
 
-            // When AI is not speaking, immediately give candidate the floor
-            if (!audioPlaybackService.getIsPlaying()) {
-              if (inFlightAbortRef.current) {
-                inFlightAbortRef.current.abort();
-              }
-
+            setState((prev) => ({
+              ...prev,
+              activeSpeakerId: STUDENT_PARTICIPANT.id,
+              voiceFlowState: "student_speaking",
+              events: [
+                ...prev.events,
+                createSessionEvent("student_speech_start"),
+              ],
+            }));
+          },
+          onStudentTranscriptPartial: (text) => {
+            if (!isSubscribed) return;
+            setState((prev) => ({
+              ...prev,
+              liveCaption: text,
+            }));
+          },
+          onStudentTurnCommitted: (text, durMs) => {
+            if (!isSubscribed) return;
+            const speakingDur = Math.max(800, durMs);
+            setState((prev) => ({
+              ...prev,
+              studentSpeakingDurationMs:
+                prev.studentSpeakingDurationMs + speakingDur,
+              liveCaption: "",
+              events: [
+                ...prev.events,
+                createSessionEvent("student_speech_end", {
+                  durationMs: speakingDur,
+                }),
+              ],
+            }));
+            submitStudentTurn(text);
+          },
+          onAiSpeechStart: (speakerId) => {
+            if (!isSubscribed) return;
+            const currentRef = pendingS2STurnRef.current;
+            if (currentRef && generationRef.current === currentRef.genId) {
               setState((prev) => ({
                 ...prev,
-                activeSpeakerId: STUDENT_PARTICIPANT.id,
-                voiceFlowState: 'student_speaking',
-                events: [...prev.events, createSessionEvent('student_speech_start')]
+                isGenerating: false,
+                generatingSpeakerId: null,
+                activeSpeakerId: speakerId,
+                voiceFlowState: "ai_speaking",
+                consecutiveAiTurns:
+                  currentRef.speaker.role === "ai_participant"
+                    ? prev.consecutiveAiTurns + 1
+                    : 0,
+                events: [
+                  ...prev.events,
+                  createSessionEvent("ai_generation_completed", { speakerId }),
+                  createSessionEvent("tts_playback_start", { speakerId }),
+                ],
               }));
             }
           },
-          onPartialTranscript: (text) => {
+          onAiTranscriptPartial: (_speakerId, text) => {
             if (!isSubscribed) return;
-            // Ignore during AI speech playback to prevent self-interruption from acoustic bleed
-            if (audioPlaybackService.getIsPlaying()) return;
-
-            setState((prev) => ({
-              ...prev,
-              liveCaption: text
-            }));
+            const currentRef = pendingS2STurnRef.current;
+            if (currentRef && generationRef.current === currentRef.genId) {
+              const turnId = currentRef.id;
+              setState((prev) => ({
+                ...prev,
+                liveCaption: text,
+                transcript: prev.transcript.map((t) =>
+                  t.id === turnId
+                    ? {
+                        ...t,
+                        text,
+                        deliveredText: text,
+                        deliveryState: "in-progress",
+                      }
+                    : t,
+                ),
+              }));
+            }
           },
-          onTurnCommitted: (text) => {
+          onAiTurnComplete: (speakerId, fullText, durationMs) => {
             if (!isSubscribed) return;
-            const trimmed = text.trim();
-            if (!trimmed || trimmed.length < 3) {
-              setState((prev) => ({ ...prev, liveCaption: '' }));
+            const currentRef = pendingS2STurnRef.current;
+            if (!currentRef || generationRef.current !== currentRef.genId)
               return;
+            const turnId = currentRef.id;
+            const speaker = currentRef.speaker;
+            const objective = currentRef.objective;
+            const genId = currentRef.genId;
+            pendingS2STurnRef.current = null;
+
+            setState((prev) => {
+              const isPhaseTransition = resolveNextPhase(
+                prev.phase,
+                speaker.role,
+                objective,
+              );
+              return {
+                ...prev,
+                activeSpeakerId: null,
+                voiceFlowState: "listening",
+                phase: isPhaseTransition,
+                liveCaption: "",
+                aiSpeakingDurationMs: prev.aiSpeakingDurationMs + durationMs,
+                transcript: prev.transcript.map((t) =>
+                  t.id === turnId
+                    ? {
+                        ...t,
+                        text: fullText || t.text,
+                        deliveredText: fullText || t.deliveredText || t.text,
+                        deliveryState: "complete",
+                        deliveryStatus: "fully_delivered",
+                        playbackDurationMs: durationMs,
+                      }
+                    : t,
+                ),
+                events: [
+                  ...prev.events,
+                  createSessionEvent("tts_playback_complete", {
+                    speakerId,
+                    durationMs,
+                  }),
+                  createSessionEvent("turn_displayed", { turnId, speakerId }),
+                ],
+              };
+            });
+
+            const isModTurn = speaker.role === "moderator";
+            const pauseBetween = isModTurn
+              ? getStudentOpportunityPauseMs(stateRef.current.config.patience)
+              : getTurnPauseMs(stateRef.current.config.patience);
+
+            if (isModTurn) {
+              setState((prev) => ({
+                ...prev,
+                awaitingStudentOpportunity: true,
+              }));
             }
 
-            const speakingDur = Math.max(800, Date.now() - studentSpeechStartRef.current);
-
-            setState((prev) => ({
-              ...prev,
-              studentSpeakingDurationMs: prev.studentSpeakingDurationMs + speakingDur,
-              liveCaption: '',
-              events: [
-                ...prev.events,
-                createSessionEvent('student_speech_end', { durationMs: speakingDur })
-              ]
-            }));
-
-            submitStudentTurn(trimmed);
+            scheduleNextTurnRef.current(genId, pauseBetween);
           },
-
+          onInterrupted: (speakerId, deliveredText, playedDurationMs) => {
+            if (!isSubscribed) return;
+            const currentRef = pendingS2STurnRef.current;
+            if (currentRef) {
+              const turnId = currentRef.id;
+              pendingS2STurnRef.current = null;
+              setState((prev) => ({
+                ...prev,
+                activeSpeakerId: null,
+                liveCaption: "",
+                aiSpeakingDurationMs:
+                  prev.aiSpeakingDurationMs + playedDurationMs,
+                transcript: prev.transcript.map((t) =>
+                  t.id === turnId
+                    ? {
+                        ...t,
+                        deliveryState: "complete",
+                        deliveryStatus: "interrupted",
+                        deliveredText:
+                          deliveredText || t.deliveredText || t.text,
+                        playbackDurationMs: playedDurationMs,
+                      }
+                    : t,
+                ),
+                events: [
+                  ...prev.events,
+                  createSessionEvent("tts_interrupted", {
+                    speakerId,
+                    playedDurationMs,
+                  }),
+                ],
+              }));
+            }
+          },
           onError: (err) => {
-            console.warn('[STT Service Notice]:', err.message);
-          }
+            console.warn("[S2S Service Notice]:", err.message);
+          },
         },
-        {
-          patience: state.config.patience,
-          language: state.config.language,
-          preferGateway: true
-        }
       );
+
+      // 2. If S2S is not available, fallback to legacy STT service
+      if (!s2sConnected) {
+        await speechRecognitionService.start(
+          {
+            onSpeechStart: () => {
+              if (!isSubscribed) return;
+              studentSpeechStartRef.current = Date.now();
+              if (!audioPlaybackService.getIsPlaying()) {
+                if (inFlightAbortRef.current) inFlightAbortRef.current.abort();
+                setState((prev) => ({
+                  ...prev,
+                  activeSpeakerId: STUDENT_PARTICIPANT.id,
+                  voiceFlowState: "student_speaking",
+                  events: [
+                    ...prev.events,
+                    createSessionEvent("student_speech_start"),
+                  ],
+                }));
+              }
+            },
+            onPartialTranscript: (text) => {
+              if (!isSubscribed || audioPlaybackService.getIsPlaying()) return;
+              setState((prev) => ({ ...prev, liveCaption: text }));
+            },
+            onTurnCommitted: (text) => {
+              if (!isSubscribed) return;
+              const trimmed = text.trim();
+              if (!trimmed || trimmed.length < 3) {
+                setState((prev) => ({ ...prev, liveCaption: "" }));
+                return;
+              }
+              const speakingDur = Math.max(
+                800,
+                Date.now() - studentSpeechStartRef.current,
+              );
+              setState((prev) => ({
+                ...prev,
+                studentSpeakingDurationMs:
+                  prev.studentSpeakingDurationMs + speakingDur,
+                liveCaption: "",
+                events: [
+                  ...prev.events,
+                  createSessionEvent("student_speech_end", {
+                    durationMs: speakingDur,
+                  }),
+                ],
+              }));
+              submitStudentTurn(trimmed);
+            },
+            onError: (err) => {
+              console.warn("[STT Service Notice]:", err.message);
+            },
+          },
+          {
+            patience: state.config.patience,
+            language: state.config.language,
+            preferGateway: true,
+          },
+        );
+      }
     }
 
-    void initSTT();
+    void initVoice();
 
     return () => {
       isSubscribed = false;
+      speechToSpeechService.stop();
       speechRecognitionService.stop();
     };
   }, [
@@ -1106,8 +1464,10 @@ export function SessionProvider({
     state.isMicMuted,
     state.config.patience,
     state.config.language,
+    state.config.topic,
+    state.participants,
     state.errorState,
-    submitStudentTurn
+    submitStudentTurn,
   ]);
 
   const startSession = useCallback(
@@ -1118,16 +1478,16 @@ export function SessionProvider({
       const participants = [
         STUDENT_PARTICIPANT,
         MODERATOR,
-        ...getParticipantsForPanel(config.participantCount)
+        ...getParticipantsForPanel(config.participantCount),
       ];
 
       const initialEngine: EngineMode = resolveInitialEngine(
         config.preferredEngine,
-        stateRef.current.isAiConfigured
+        stateRef.current.isAiConfigured,
       );
 
       setState({
-        phase: 'opening',
+        phase: "opening",
         isPaused: false,
         activeSpeakerId: null,
         config,
@@ -1144,43 +1504,45 @@ export function SessionProvider({
         generatingSpeakerId: null,
         errorState: null,
         events: [
-          createSessionEvent('session_started', {
+          createSessionEvent("session_started", {
             topic: config.topic,
             engineMode: initialEngine,
-            interactionMode: config.mode || 'voice'
-          })
+            interactionMode: config.mode || "voice",
+          }),
         ],
         consecutiveAiTurns: 0,
         awaitingStudentOpportunity: false,
         isAiConfigured: stateRef.current.isAiConfigured,
-        interactionMode: config.mode || 'voice',
-        voiceFlowState: 'listening',
-        liveCaption: '',
+        interactionMode: config.mode || "voice",
+        voiceFlowState: "listening",
+        liveCaption: "",
         studentSpeakingDurationMs: 0,
         aiSpeakingDurationMs: 0,
         isAudioBlocked: false,
-        isMicMuted: false
+        isMicMuted: false,
       });
 
       // Schedule opening turn immediately to eliminate awkward startup wait
       scheduleNextTurnRef.current(genId, 200);
     },
-    [bumpGeneration]
+    [bumpGeneration],
   );
 
   const pauseSession = useCallback(() => {
     bumpGeneration();
     speechRecognitionService.stop();
     sarvamSpeechProvider.stop();
+    speechToSpeechService.stop();
+    pcmAudioPlayer.stop(false);
 
     setState((prev) => ({
       ...prev,
       isPaused: true,
       activeSpeakerId: null,
-      voiceFlowState: 'paused',
+      voiceFlowState: "paused",
       isGenerating: false,
       generatingSpeakerId: null,
-      events: [...prev.events, createSessionEvent('session_paused')]
+      events: [...prev.events, createSessionEvent("session_paused")],
     }));
   }, [bumpGeneration]);
 
@@ -1191,12 +1553,12 @@ export function SessionProvider({
       ...prev,
       isPaused: false,
       activeSpeakerId: null,
-      voiceFlowState: 'listening',
+      voiceFlowState: "listening",
       isGenerating: false,
       generatingSpeakerId: null,
       errorState: null,
       generationId: genId,
-      events: [...prev.events, createSessionEvent('session_resumed')]
+      events: [...prev.events, createSessionEvent("session_resumed")],
     }));
   }, [bumpGeneration]);
 
@@ -1204,16 +1566,18 @@ export function SessionProvider({
     bumpGeneration();
     speechRecognitionService.stop();
     sarvamSpeechProvider.stop();
+    speechToSpeechService.stop();
+    pcmAudioPlayer.stop(false);
 
     setState((prev) => ({
       ...prev,
-      phase: 'completed',
+      phase: "completed",
       isPaused: true,
       activeSpeakerId: null,
-      voiceFlowState: 'completed',
+      voiceFlowState: "completed",
       isGenerating: false,
       generatingSpeakerId: null,
-      events: [...prev.events, createSessionEvent('session_ended')]
+      events: [...prev.events, createSessionEvent("session_ended")],
     }));
   }, [bumpGeneration]);
 
@@ -1222,20 +1586,22 @@ export function SessionProvider({
     clearSessionFromStorage();
     speechRecognitionService.stop();
     sarvamSpeechProvider.stop();
+    speechToSpeechService.stop();
+    pcmAudioPlayer.stop(false);
     setIsRestoredSession(false);
     setReport(null);
     setIsGeneratingReport(false);
     setReportError(null);
 
     setState({
-      phase: 'setup',
+      phase: "setup",
       isPaused: false,
       activeSpeakerId: null,
       config: DEFAULT_CONFIG,
       participants: [
         STUDENT_PARTICIPANT,
         MODERATOR,
-        ...getParticipantsForPanel(DEFAULT_CONFIG.participantCount)
+        ...getParticipantsForPanel(DEFAULT_CONFIG.participantCount),
       ],
       transcript: [],
       elapsedSeconds: 0,
@@ -1244,21 +1610,21 @@ export function SessionProvider({
       isCaptionsVisible: true,
       studentHasSpokenInClosing: false,
       acknowledgedStudentContribution: false,
-      engineMode: stateRef.current.isAiConfigured ? 'ai' : 'demo',
+      engineMode: stateRef.current.isAiConfigured ? "ai" : "demo",
       isGenerating: false,
       generatingSpeakerId: null,
       errorState: null,
-      events: [createSessionEvent('session_started')],
+      events: [createSessionEvent("session_started")],
       consecutiveAiTurns: 0,
       awaitingStudentOpportunity: false,
       isAiConfigured: stateRef.current.isAiConfigured,
-      interactionMode: 'voice',
-      voiceFlowState: 'idle',
-      liveCaption: '',
+      interactionMode: "voice",
+      voiceFlowState: "idle",
+      liveCaption: "",
       studentSpeakingDurationMs: 0,
       aiSpeakingDurationMs: 0,
       isAudioBlocked: false,
-      isMicMuted: false
+      isMicMuted: false,
     });
   }, [bumpGeneration]);
 
@@ -1268,30 +1634,36 @@ export function SessionProvider({
 
     setState((prev) => ({
       ...prev,
-      phase: 'closing',
+      phase: "closing",
       activeSpeakerId: null,
-      voiceFlowState: 'listening',
+      voiceFlowState: "listening",
       isGenerating: false,
       generatingSpeakerId: null,
       generationId: genId,
-      elapsedSeconds: Math.max(prev.elapsedSeconds, prev.totalDurationSeconds - 40),
-      events: [...prev.events, createSessionEvent('phase_changed', { phase: 'closing' })]
+      elapsedSeconds: Math.max(
+        prev.elapsedSeconds,
+        prev.totalDurationSeconds - 40,
+      ),
+      events: [
+        ...prev.events,
+        createSessionEvent("phase_changed", { phase: "closing" }),
+      ],
     }));
   }, [bumpGeneration]);
 
   const skipStudentClosing = useCallback(() => {
     const current = stateRef.current;
-    if (current.phase !== 'closing') return;
+    if (current.phase !== "closing") return;
 
     const genId = bumpGeneration();
     setState((prev) => ({
       ...prev,
       studentHasSpokenInClosing: true,
       activeSpeakerId: null,
-      voiceFlowState: 'listening',
+      voiceFlowState: "listening",
       isGenerating: false,
       generatingSpeakerId: null,
-      generationId: genId
+      generationId: genId,
     }));
     scheduleNextTurn(genId, 600);
   }, [bumpGeneration, scheduleNextTurn]);
@@ -1299,11 +1671,14 @@ export function SessionProvider({
   const switchToDemoMode = useCallback(() => {
     setState((prev) => ({
       ...prev,
-      engineMode: 'demo',
+      engineMode: "demo",
       errorState: null,
       isGenerating: false,
       generatingSpeakerId: null,
-      events: [...prev.events, createSessionEvent('switched_to_demo', { manual: true })]
+      events: [
+        ...prev.events,
+        createSessionEvent("switched_to_demo", { manual: true }),
+      ],
     }));
     const genId = bumpGeneration();
     scheduleNextTurn(genId, 800);
@@ -1314,7 +1689,7 @@ export function SessionProvider({
       ...prev,
       errorState: null,
       isGenerating: false,
-      generatingSpeakerId: null
+      generatingSpeakerId: null,
     }));
     const genId = bumpGeneration();
     scheduleNextTurn(genId, 600);
@@ -1323,29 +1698,30 @@ export function SessionProvider({
   const toggleCaptions = useCallback(() => {
     setState((prev) => ({
       ...prev,
-      isCaptionsVisible: !prev.isCaptionsVisible
+      isCaptionsVisible: !prev.isCaptionsVisible,
     }));
   }, []);
 
   const setMicMuted = useCallback((muted: boolean) => {
     setState((prev) => ({
       ...prev,
-      isMicMuted: muted
+      isMicMuted: muted,
     }));
   }, []);
 
   const setInteractionMode = useCallback((mode: InteractionMode) => {
     setState((prev) => ({
       ...prev,
-      interactionMode: mode
+      interactionMode: mode,
     }));
   }, []);
 
   const unlockAudio = useCallback(async () => {
     await audioPlaybackService.unlockAudio();
+    await pcmAudioPlayer.unlock();
     setState((prev) => ({
       ...prev,
-      isAudioBlocked: false
+      isAudioBlocked: false,
     }));
   }, []);
 
@@ -1363,7 +1739,11 @@ export function SessionProvider({
   const generateReport = useCallback(
     async (forceRegenerate: boolean = false) => {
       const currentFp = generateTranscriptFingerprint(state.transcript);
-      if (!forceRegenerate && report && report.sessionFingerprint === currentFp) {
+      if (
+        !forceRegenerate &&
+        report &&
+        report.sessionFingerprint === currentFp
+      ) {
         return;
       }
 
@@ -1371,19 +1751,19 @@ export function SessionProvider({
       setReportError(null);
 
       try {
-        const response = await fetch('/api/discussion/report', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await fetch("/api/discussion/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             topic: state.config.topic,
             language: state.config.language,
             transcript: state.transcript,
             timingEvents: [],
             activeDurationMs: state.elapsedSeconds * 1000,
-            isVoiceMode: state.interactionMode === 'voice',
-            isDemoMode: state.engineMode === 'demo',
-            sessionFingerprint: currentFp
-          })
+            isVoiceMode: state.interactionMode === "voice",
+            isDemoMode: state.engineMode === "demo",
+            sessionFingerprint: currentFp,
+          }),
         });
 
         const data = await response.json();
@@ -1391,22 +1771,27 @@ export function SessionProvider({
           setReport(data.report);
           saveSessionToStorage(state, data.report);
         } else {
-          setReportError(data.error || 'Failed to generate discussion report.');
+          setReportError(data.error || "Failed to generate discussion report.");
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        setReportError(msg || 'Network error while generating report.');
+        setReportError(msg || "Network error while generating report.");
       } finally {
         setIsGeneratingReport(false);
       }
     },
-    [state, report]
+    [state, report],
   );
 
   // Auto-generate report when entering completed phase if missing
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null;
-    if (state.phase === 'completed' && !report && !isGeneratingReport && !reportError) {
+    if (
+      state.phase === "completed" &&
+      !report &&
+      !isGeneratingReport &&
+      !reportError
+    ) {
       timer = setTimeout(() => {
         void generateReport();
       }, 50);
@@ -1440,7 +1825,7 @@ export function SessionProvider({
       isGeneratingReport,
       reportError,
       isReportStale,
-      generateReport
+      generateReport,
     }),
     [
       state,
@@ -1465,8 +1850,8 @@ export function SessionProvider({
       isGeneratingReport,
       reportError,
       isReportStale,
-      generateReport
-    ]
+      generateReport,
+    ],
   );
 
   return (
@@ -1479,7 +1864,7 @@ export function SessionProvider({
 export function useSession() {
   const context = useContext(SessionContext);
   if (!context) {
-    throw new Error('useSession must be used within a SessionProvider');
+    throw new Error("useSession must be used within a SessionProvider");
   }
   return context;
 }
