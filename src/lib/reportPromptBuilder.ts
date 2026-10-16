@@ -35,7 +35,9 @@ export function buildReportUserPrompt(params: BuildReportPromptParams): string {
     .map((t, idx) => {
       const eligibleText = getEligibleTurnText(t);
       const interruptedTag = t.deliveryStatus === 'interrupted' ? ' [Interrupted before finishing]' : '';
-      return `Turn #${idx + 1} | ID: "${t.id}" | Speaker: "${t.speakerName}" (${t.speakerRole}):\n"${eligibleText}"${interruptedTag}`;
+      // Phase lets the coach credit closing-round summaries for "Ending strongly"
+      const phaseTag = t.phase ? ` | Phase: ${t.phase === 'closing' ? 'CLOSING ROUND' : t.phase}` : '';
+      return `Turn #${idx + 1} | ID: "${t.id}" | Speaker: "${t.speakerName}" (${t.speakerRole})${phaseTag}:\n"${eligibleText}"${interruptedTag}`;
     })
     .join('\n\n');
 

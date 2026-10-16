@@ -9,7 +9,6 @@ import {
   Headphones,
   CheckCircle2,
   ShieldCheck,
-  Sparkles,
   ArrowRight,
 } from "lucide-react";
 import { audioPlaybackService } from "@/services/audio/audioPlaybackService";
@@ -222,173 +221,198 @@ export function AudioPreflightModal({
     };
   }, []);
 
+  // Close on Escape while open
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleCancelModal();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+
   if (!isOpen) return null;
 
+  const isGranted = permissionState === "granted";
+  const hasError =
+    permissionState === "denied" ||
+    permissionState === "error" ||
+    permissionState === "unsupported";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-[#141417] border border-[#27272a] rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col text-zinc-100">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+      onClick={handleCancelModal}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="preflight-title"
+        onClick={(e) => e.stopPropagation()}
+        className="flex w-full max-w-lg animate-fade-up flex-col overflow-hidden rounded-xl border border-hair bg-card font-body text-ink shadow-[0_24px_60px_-20px_rgba(26,26,23,0.45)]"
+      >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#27272a] bg-[#101013] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-200">
-              <Mic className="w-4 h-4" />
+        <div className="border-b border-hair px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-forest text-paper">
+                <Mic className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 id="preflight-title" className="font-serif text-xl font-semibold">
+                  Check your mic &amp; speakers
+                </h3>
+                <p className="text-sm text-muted">
+                  A quick check before you enter the room
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-semibold text-base text-white">
-                Audio & Voice Preflight
-              </h3>
-              <p className="text-xs text-zinc-400">
-                Verify your microphone and speakers before practice
-              </p>
-            </div>
+            <button
+              onClick={handleCancelModal}
+              aria-label="Cancel"
+              className="cursor-pointer rounded-lg border border-hair px-3 py-1.5 text-sm text-muted transition-colors hover:text-ink"
+            >
+              Cancel
+            </button>
           </div>
-          <button
-            onClick={handleCancelModal}
-            className="text-zinc-400 hover:text-white text-xs px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition cursor-pointer"
-          >
-            Cancel
-          </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-4">
-          {/* Disclosure Card */}
-          <div className="p-3.5 rounded-xl bg-[#101013] border border-[#27272a] text-xs text-zinc-300 space-y-2">
-            <div className="flex items-center gap-2 text-zinc-200 font-medium">
-              <ShieldCheck className="w-4 h-4 text-zinc-300 shrink-0" />
-              <span>Voice Processing Disclosure</span>
-            </div>
-            <p className="text-zinc-400 leading-relaxed">
-              Your audio will be streamed in real-time to speech recognition
-              services for live transcription. No raw audio recordings are
-              permanently stored or shared.
-            </p>
-            <div className="flex items-center gap-2 text-zinc-400 pt-1 border-t border-[#27272a]">
-              <Headphones className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-              <span>
-                Recommended: Wear headphones to prevent AI voice loopback.
-              </span>
-            </div>
-          </div>
-
-          {/* Microphone Test Area */}
-          <div className="p-4 rounded-xl bg-[#101013] border border-[#27272a] space-y-4">
+        <div className="space-y-4 p-6">
+          {/* Microphone test */}
+          <div className="rounded-lg border border-hair bg-paper p-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-zinc-200 flex items-center gap-2">
-                {permissionState === "granted" ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                {isGranted ? (
+                  <CheckCircle2 className="h-4 w-4 text-forest" />
                 ) : (
-                  <MicOff className="w-4 h-4 text-zinc-400" />
+                  <MicOff className="h-4 w-4 text-muted" />
                 )}
-                <span>Microphone Status</span>
-              </div>
-              <span className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
-                {permissionState === "granted" ? "Connected" : permissionState}
+                Microphone
+              </span>
+              <span
+                className={`rounded px-2 py-0.5 text-xs font-medium capitalize ${
+                  isGranted ? "bg-forest-soft text-forest" : hasError ? "bg-[#f3ddd8] text-danger" : "bg-paper-2 text-muted"
+                }`}
+              >
+                {isGranted ? "Connected" : permissionState}
               </span>
             </div>
 
             {permissionState === "prompt" && (
-              <div className="text-center py-4 space-y-3">
-                <p className="text-xs text-zinc-400">
-                  Click below to grant temporary microphone access.
-                </p>
+              <div className="space-y-3 py-4 text-center">
+                <p className="text-xs text-muted">Allow microphone access to test your input level.</p>
                 <button
                   onClick={requestMicrophoneAccess}
-                  className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs rounded-xl shadow-sm transition flex items-center gap-2 mx-auto cursor-pointer"
+                  className="mx-auto flex cursor-pointer items-center gap-2 rounded-lg bg-forest px-5 py-2.5 text-sm font-medium text-paper transition-colors hover:bg-forest-hover"
                 >
-                  <Mic className="w-4 h-4" />
-                  Grant & Test Microphone
+                  <Mic className="h-4 w-4" />
+                  Allow &amp; test microphone
                 </button>
               </div>
             )}
 
             {permissionState === "requesting" && (
-              <div className="text-center py-4 text-xs text-zinc-300 animate-pulse">
-                Requesting microphone permission from browser...
-              </div>
+              <p className="animate-pulse py-4 text-center text-xs text-muted">
+                Waiting for microphone permission…
+              </p>
             )}
 
-            {permissionState === "granted" && (
-              <div className="space-y-3">
-                <div className="text-xs text-zinc-400 truncate">
-                  Device: <span className="text-zinc-200">{deviceName}</span>
+            {isGranted && (
+              <div className="mt-3 space-y-3">
+                <p className="truncate text-xs text-muted">
+                  Device: <span className="font-medium text-ink">{deviceName}</span>
+                </p>
+
+                {/* Live level meter */}
+                <div>
+                  <div className="mb-1.5 flex justify-between text-[11px] text-muted">
+                    <span>Say something to test</span>
+                    <span className="font-mono tabular-nums">{volumeLevel}%</span>
+                  </div>
+                  <div className="flex h-8 items-end gap-[3px]" aria-hidden="true">
+                    {Array.from({ length: 28 }, (_, i) => {
+                      const threshold = ((i + 1) / 28) * 100;
+                      const lit = volumeLevel >= threshold;
+                      return (
+                        <span
+                          key={i}
+                          className="flex-1 rounded-sm transition-colors duration-75"
+                          style={{
+                            height: `${30 + (i / 28) * 70}%`,
+                            background: lit ? (threshold > 85 ? "#e3a13b" : "#1e3a2f") : "#e2dccf",
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Live VU Volume Meter */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[11px] text-zinc-400">
-                    <span>Input Level (Speak to test)</span>
-                    <span className="font-mono">{volumeLevel}%</span>
-                  </div>
-                  <div className="w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden p-0.5 border border-zinc-800">
-                    <div
-                      className="h-full rounded-full transition-all duration-75 bg-zinc-200"
-                      style={{ width: `${Math.max(4, volumeLevel)}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Speaker Audio Test */}
-                <div className="pt-2 flex items-center justify-between border-t border-zinc-800 text-xs">
-                  <span className="text-zinc-400">Browser Audio Output</span>
+                {/* Speaker test */}
+                <div className="flex items-center justify-between border-t border-hair pt-3 text-xs">
+                  <span className="text-muted">Speakers</span>
                   <button
                     onClick={handleTestTone}
                     disabled={isTestTonePlaying}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-lg transition cursor-pointer"
+                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-hair bg-card px-3 py-1.5 font-medium transition-colors hover:border-forest hover:text-forest disabled:opacity-60"
                   >
-                    <Volume2 className="w-3.5 h-3.5 text-zinc-300" />
-                    <span>
-                      {isTestTonePlaying
-                        ? "Playing chime..."
-                        : "Play Test Tone"}
-                    </span>
+                    <Volume2 className="h-3.5 w-3.5" />
+                    {isTestTonePlaying ? "Playing…" : "Play test tone"}
                   </button>
                 </div>
               </div>
             )}
 
-            {(permissionState === "denied" ||
-              permissionState === "error" ||
-              permissionState === "unsupported") && (
-              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-300 space-y-2">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>{errorMessage || "Microphone error occurred."}</span>
-                </div>
+            {hasError && (
+              <div className="mt-3 space-y-2 rounded-lg border border-danger/20 bg-[#f3ddd8]/50 p-3 text-sm">
+                <p className="flex items-start gap-2 text-ink">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+                  {errorMessage || "Microphone error occurred."}
+                </p>
                 <div className="flex gap-2 pt-1">
                   <button
                     onClick={requestMicrophoneAccess}
-                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-lg transition cursor-pointer"
+                    className="cursor-pointer rounded-lg bg-forest px-3 py-1.5 font-medium text-paper"
                   >
-                    Retry Permission
+                    Try again
                   </button>
                   <button
                     onClick={() => {
                       cleanupAudio();
                       onSwitchToTextMode();
                     }}
-                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition cursor-pointer"
+                    className="cursor-pointer rounded-lg border border-hair bg-card px-3 py-1.5 font-medium"
                   >
-                    Switch to Text Mode
+                    Use text mode
                   </button>
                 </div>
               </div>
             )}
           </div>
+
+          {/* Privacy + tips */}
+          <ul className="space-y-2 text-sm text-muted">
+            <li className="flex items-start gap-2.5">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-forest" />
+              Your voice is transcribed live. Raw audio is never stored.
+            </li>
+            <li className="flex items-start gap-2.5">
+              <Headphones className="mt-0.5 h-4 w-4 shrink-0 text-forest" />
+              Wear headphones so the panel&apos;s voices don&apos;t echo into your mic.
+            </li>
+          </ul>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-[#101013] border-t border-[#27272a] flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 border-t border-hair px-6 py-4">
           <button
             onClick={() => {
               cleanupAudio();
               onSwitchToTextMode();
             }}
-            className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-4 cursor-pointer"
+            className="cursor-pointer text-sm text-muted underline underline-offset-4 hover:text-ink"
           >
-            Continue in Text Mode instead
+            Use text mode instead
           </button>
-
           <button
             onClick={async () => {
               await audioPlaybackService.unlockAudio();
@@ -398,11 +422,10 @@ export function AudioPreflightModal({
               cleanupAudio();
               onConfirmVoiceMode();
             }}
-            className="px-4 py-2 bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer"
+            className="flex cursor-pointer items-center gap-2 rounded-lg bg-marigold px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-[#d6942f]"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Enter Discussion Room</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            Enter the room
+            <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

@@ -1,980 +1,490 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { useSession } from '@/context/SessionContext';
-import { DimensionRating } from '@/types/report';
-import { calculateSessionMetrics } from '@/lib/metricsCalculator';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Download,
-  RotateCcw,
-  CheckCircle2,
-  Clock,
-  Users,
-  MessageSquare,
-  Award,
-  FileText,
-  Mic,
-  Volume2,
-  ShieldAlert,
-  Sparkles,
-  ExternalLink,
   AlertCircle,
+  ArrowRight,
+  ChevronDown,
+  Download,
+  FileText,
+  MessageSquareQuote,
   RefreshCw,
-  ArrowRight
+  RotateCcw,
 } from 'lucide-react';
+import { useSession } from '@/context/SessionContext';
+import { calculateSessionMetrics } from '@/lib/metricsCalculator';
+import { downloadMarkdownReport, downloadSessionJson, downloadTranscript } from '@/lib/reportExport';
+import { DimensionRating } from '@/types/report';
+import { PersonaAvatar } from '@/components/ui/PersonaAvatar';
+import { STUDENT_PARTICIPANT } from '@/constants/participants';
+import { AirtimeChart } from './AirtimeChart';
+import { DiscussionTimeline } from './DiscussionTimeline';
+import { SkillCard } from './SkillCard';
+import { RATING_STYLES, SKILL_TIPS, formatClock, formatSpan } from './reportUi';
 
-function getRatingBadge(rating: DimensionRating) {
-  switch (rating) {
-    case 'Strength':
-      return {
-        label: 'Strength',
-        className: 'bg-zinc-900 text-emerald-300 border-zinc-700'
-      };
-    case 'Developing':
-      return {
-        label: 'Developing',
-        className: 'bg-zinc-900 text-zinc-300 border-zinc-800'
-      };
-    case 'Needs practice':
-      return {
-        label: 'Needs practice',
-        className: 'bg-zinc-900 text-amber-300 border-zinc-800'
-      };
-    case 'Not observed':
-    default:
-      return {
-        label: 'Not observed',
-        className: 'bg-zinc-900 text-zinc-500 border-zinc-800'
-      };
-  }
+const DEFAULT_DISCLAIMER =
+  'AI-generated practice coaching based strictly on observable behaviours in this session; not an official placement assessment.';
+
+function Section({
+  id,
+  title,
+  description,
+  action,
+  children,
+}: {
+  readonly id?: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly action?: React.ReactNode;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-20 rounded-2xl border border-hair bg-card p-5 sm:p-7">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-serif text-2xl font-semibold tracking-tight text-ink">{title}</h2>
+          {description && <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
 }
 
-function getTranscriptTurnCardStyle(
-  isHighlighted: boolean,
-  isStudent: boolean,
-  isModerator: boolean,
-  isInterrupted: boolean
-): string {
-  if (isHighlighted) {
-    return 'ring-1 ring-white border-zinc-500 bg-zinc-800/80';
-  }
-  if (isStudent) {
-    return 'bg-[#18181c] border-[#3f3f46] ml-2';
-  }
-  if (isModerator) {
-    return 'bg-[#141417] border-[#27272a]';
-  }
-  if (isInterrupted) {
-    return 'bg-[#1a1815] border-amber-900/40';
-  }
-  return 'bg-[#141417] border-[#27272a]';
+function StatTile({ label, value, hint }: { readonly label: string; readonly value: string; readonly hint?: string }) {
+  return (
+    <div className="rounded-xl border border-hair bg-card p-4">
+      <p className="text-xs font-medium uppercase tracking-[0.1em] text-muted">{label}</p>
+      <p className="mt-2 font-serif text-3xl font-semibold tabular-nums text-ink">{value}</p>
+      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+    </div>
+  );
 }
 
-function getTranscriptSpeakerColor(isStudent: boolean, isModerator: boolean): string {
-  if (isStudent) return 'text-white font-semibold';
-  if (isModerator) return 'text-zinc-200 font-semibold';
-  return 'text-zinc-300';
-}
+function DownloadMenu({ onMarkdown, onTranscript, onJson }: { readonly onMarkdown: () => void; readonly onTranscript: () => void; readonly onJson: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-function formatDurationMs(ms: number | null): string {
-  if (ms === null || ms === undefined) return 'Unavailable';
-  const totalSecs = Math.round(ms / 1000);
-  const m = Math.floor(totalSecs / 60);
-  const s = totalSecs % 60;
-  if (m === 0) return `${s}s`;
-  return `${m}m ${s}s`;
-}
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
-function formatRelativeTime(ms: number | undefined): string {
-  if (ms === undefined || ms === null) return '00:00';
-  const totalSecs = Math.floor(ms / 1000);
-  const m = Math.floor(totalSecs / 60);
-  const s = totalSecs % 60;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const item = 'block w-full cursor-pointer px-4 py-2.5 text-left text-sm text-ink hover:bg-paper';
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-10 cursor-pointer items-center gap-2 rounded-lg border border-hair bg-card px-3.5 text-sm font-medium text-ink hover:border-muted/40"
+      >
+        <Download className="h-4 w-4" />
+        <span className="hidden sm:inline">Download</span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted" />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-lg border border-hair bg-card shadow-[0_12px_32px_-12px_rgba(26,26,23,0.35)]">
+          <button role="menuitem" id="download-markdown-report-btn" className={item} onClick={() => { onMarkdown(); setOpen(false); }}>
+            Coaching report (.md)
+          </button>
+          <button role="menuitem" className={item} onClick={() => { onTranscript(); setOpen(false); }}>
+            Transcript (.txt)
+          </button>
+          <button role="menuitem" id="download-json-btn" className={item} onClick={() => { onJson(); setOpen(false); }}>
+            Full session data (.json)
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SessionSummary() {
-  const {
-    state,
-    resetSession,
-    report,
-    isGeneratingReport,
-    reportError,
-    isReportStale,
-    generateReport
-  } = useSession();
-
+  const { state, resetSession, report, isGeneratingReport, reportError, isReportStale, generateReport } = useSession();
   const [highlightedTurnId, setHighlightedTurnId] = useState<string | null>(null);
+  const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
 
-  // Compute metrics deterministically on client if report is not yet loaded
-  const fallbackMetrics = useMemo(() => {
-    return calculateSessionMetrics({
-      transcript: state.transcript,
-      timingEvents: [],
-      activeDurationMs: state.elapsedSeconds * 1000,
-      isVoiceMode: state.interactionMode === 'voice',
-      isDemoMode: state.engineMode === 'demo'
-    });
-  }, [state.transcript, state.elapsedSeconds, state.interactionMode, state.engineMode]);
-
+  const fallbackMetrics = useMemo(
+    () =>
+      calculateSessionMetrics({
+        transcript: state.transcript,
+        timingEvents: [],
+        activeDurationMs: state.elapsedSeconds * 1000,
+        isVoiceMode: state.interactionMode === 'voice',
+        isDemoMode: state.engineMode === 'demo',
+      }),
+    [state.transcript, state.elapsedSeconds, state.interactionMode, state.engineMode],
+  );
   const metrics = report?.metrics || fallbackMetrics;
+  const exportInput = { state, metrics, report };
 
-  const totalTurns = state.transcript.length;
-  const elapsedMins = Math.floor(state.elapsedSeconds / 60);
-  const elapsedSecs = state.elapsedSeconds % 60;
-  const formattedDuration = `${elapsedMins}m ${elapsedSecs}s`;
+  const studentId = STUDENT_PARTICIPANT.id;
+  const yourTurns = metrics.turnCountsBySpeaker[studentId] ?? 0;
+  const yourShare = metrics.speakingSharePercent[studentId] ?? 0;
+  const evenSplit = Math.round(100 / Math.max(1, state.participants.length));
+  const durationMs = state.elapsedSeconds * 1000;
+
+  // Rating counts drive the headline; derived only from the verified report
+  const ratingCounts = useMemo(() => {
+    const counts: Record<DimensionRating, number> = { Strength: 0, Developing: 0, 'Needs practice': 0, 'Not observed': 0 };
+    report?.dimensions.forEach((d) => (counts[d.rating] = (counts[d.rating] ?? 0) + 1));
+    return counts;
+  }, [report]);
+
+  let headline = 'Your discussion is complete';
+  let subline = 'Your coaching report is being prepared from the transcript.';
+  if (yourTurns === 0) {
+    headline = "You didn't speak this round";
+    subline = 'There was nothing of yours to assess yet. Next time, try to make one point in the first two minutes.';
+  } else if (report) {
+    if (ratingCounts.Strength >= 4) {
+      headline = 'A strong, confident round';
+      subline = 'You showed clear strengths across most of the skills placement panels look for.';
+    } else if (ratingCounts.Strength >= 2) {
+      headline = 'A solid round with clear next steps';
+      subline = 'You have real strengths to build on and a couple of skills to sharpen.';
+    } else {
+      headline = 'A good start, with plenty to build on';
+      subline = 'Focus on the action plan below; small changes will show up quickly.';
+    }
+  }
+
+  const sortedDimensions = report ? [...report.dimensions] : [];
+  const topStrength = sortedDimensions.find((d) => d.rating === 'Strength');
+  // Plan: weakest rated skills first, then skills the round never showed, with concrete advice
+  const focusAreas = sortedDimensions
+    .filter((d) => d.rating !== 'Strength')
+    .sort((a, b) => {
+      const order: Record<DimensionRating, number> = { 'Needs practice': 0, Developing: 1, 'Not observed': 2, Strength: 3 };
+      return order[a.rating] - order[b.rating];
+    })
+    .slice(0, 3)
+    .map((d) => ({
+      ...d,
+      actionableImprovement: d.rating === 'Not observed' ? SKILL_TIPS[d.id] ?? d.actionableImprovement : d.actionableImprovement,
+    }));
 
   const scrollToTurn = (turnId: string) => {
-    const el = document.getElementById(`turn-${turnId}`);
-    if (el) {
+    setIsTranscriptOpen(true);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`turn-${turnId}`);
+      if (!el) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedTurnId(turnId);
-      setTimeout(() => {
-        setHighlightedTurnId((curr) => (curr === turnId ? null : curr));
-      }, 3500);
-    }
-  };
-
-  // Download complete report in Markdown
-  const handleDownloadMarkdownReport = () => {
-    const firstContributionText =
-      metrics.studentFirstContributionSecs !== null
-        ? `${metrics.studentFirstContributionSecs}s into discussion`
-        : 'Did not contribute';
-
-    const mdLines = [
-      '# GD Arena — Practice Coaching Report',
-      '',
-      `**Topic:** ${state.config.topic}  `,
-      `**Language:** ${state.config.language === 'hinglish' ? 'Hindi-English (Hinglish)' : 'English'}  `,
-      `**Session Mode:** ${metrics.isVoiceMode ? 'Live Voice' : 'Text Practice'} (${metrics.isDemoMode ? 'Scripted Demo Panel' : 'Live AI (Groq + Gemini)'})  `,
-      `**Active Duration:** ${formattedDuration} (${state.config.durationMinutes} min configured)  `,
-      `**Panel Size:** ${state.participants.length - 2} AI Debaters + 1 Moderator  `,
-      `**Report Generated:** ${report ? new Date(report.generatedAt).toLocaleString() : new Date().toLocaleString()}  `,
-      report?.modelUsed ? `**Model:** ${report.modelUsed}  ` : '',
-      '',
-      '---',
-      '',
-      '## 1. Participation & Speaking Share Metrics',
-      '',
-      '> *Note: Metrics are calculated deterministically in code. Total active speaking duration represents the sum of individual speech intervals across candidate and AI participants. Overlaps/pauses may occur; greater speaking share does not automatically equate to better performance.*',
-      '',
-      '| Participant | Role | Turns | Speaking Time | Speaking Share (%) |',
-      '| :--- | :--- | :--- | :--- | :--- |',
-      ...state.participants.map((p) => {
-        const count = metrics.turnCountsBySpeaker[p.id] || 0;
-        let timeStr: string;
-        if (p.role === 'student') {
-          timeStr = metrics.isVoiceMode
-            ? `${formatDurationMs(metrics.studentSpeakingDurationMs)} (approx. VAD)`
-            : 'Unavailable (text mode)';
-        } else if (p.role === 'moderator') {
-          timeStr = formatDurationMs(metrics.moderatorPlaybackDurationMs);
-        } else {
-          timeStr = formatDurationMs(metrics.aiPlaybackDurationMs[p.id] || 0);
-        }
-        const share = metrics.speakingSharePercent[p.id] !== undefined
-          ? `${metrics.speakingSharePercent[p.id]}%`
-          : '—';
-        let roleLabel = p.personality;
-        if (p.role === 'student') {
-          roleLabel = 'Candidate (You)';
-        } else if (p.role === 'moderator') {
-          roleLabel = 'Moderator';
-        }
-        return `| ${p.name} | ${roleLabel} | ${count} | ${timeStr} | ${share} |`;
-      }),
-      '',
-      `- **Total Active Speaking Time (Denominator):** ${formatDurationMs(metrics.totalActiveSpeakingDurationMs)}`,
-      `- **First Candidate Contribution:** ${firstContributionText}`,
-      `- **Contributed in Closing Phase:** ${metrics.studentContributedInClosing ? 'Yes' : 'No'}`,
-      `- **Interruption Overlap Events:** ${metrics.interruptedTurnsCount} detected overlap occurrences`,
-      '',
-      '---',
-      '',
-      '## 2. Qualitative Competency Dimensions',
-      ''
-    ];
-
-    if (report?.dimensions) {
-      report.dimensions.forEach((dim, idx) => {
-        mdLines.push(
-          `### ${idx + 1}. ${dim.name}`,
-          `**Rating:** \`${dim.rating}\`  `,
-          `**Observation:** ${dim.observation}  `,
-          `**Actionable Advice:** ${dim.actionableImprovement}  `
-        );
-        if (dim.evidence && dim.evidence.length > 0) {
-          mdLines.push('**Verbatim Evidence:**');
-          dim.evidence.forEach((ev) => {
-            const timeStr = formatRelativeTime(ev.relativeTimestampMs);
-            mdLines.push(`- *[${timeStr}] ${ev.speakerName || 'Speaker'} (Turn ${ev.turnId}):* "${ev.quote}"`);
-          });
-        } else {
-          mdLines.push('*Evidence:* None observed / Not applicable.');
-        }
-        mdLines.push('');
-      });
-    } else {
-      mdLines.push('*Qualitative coaching report currently unavailable.*', '');
-    }
-
-    if (report?.alternativeOpportunity) {
-      const opp = report.alternativeOpportunity;
-      mdLines.push(
-        '---',
-        '',
-        '## 3. What You Could Have Said',
-        '',
-        `> **Opportunity:** In response to ${opp.speakerName} (Turn ${opp.targetTurnId})  `,
-        `> **Context:** ${opp.opportunityContext}  `,
-        `> **Objective:** \`${opp.objective}\`  `,
-        '',
-        `**Suggested Alternative Response:**  `,
-        `*"${opp.suggestedSpeech}"*`,
-        '',
-        '*Note: This is a suggested constructive alternative, not something you actually said.*',
-        ''
-      );
-    }
-
-    mdLines.push(
-      '---',
-      '',
-      `> **Disclaimer:** ${report?.disclaimer || 'AI-generated practice coaching based strictly on observable behaviours in this session; not an official placement assessment.'}`
-    );
-
-    const blob = new Blob([mdLines.join('\n')], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `gd-arena-report-${Date.now()}.md`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // Download raw session JSON
-  const handleDownloadJSON = () => {
-    const payload = {
-      sessionId: `gd-session-${Date.now()}`,
-      exportDate: new Date().toISOString(),
-      config: state.config,
-      elapsedSeconds: state.elapsedSeconds,
-      metrics,
-      report,
-      transcript: state.transcript
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json;charset=utf-8'
+      setTimeout(() => setHighlightedTurnId((curr) => (curr === turnId ? null : curr)), 3500);
     });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `gd-arena-data-${Date.now()}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
   };
 
-  // Download simple text transcript
-  const handleDownloadTranscript = () => {
-    const headerLines = [
-      '====================================================',
-      '           GD ARENA — SESSION TRANSCRIPT            ',
-      '====================================================',
-      `Topic: ${state.config.topic}`,
-      `Language: ${state.config.language === 'english' ? 'English' : 'Hindi-English'}`,
-      `Interaction Mode: ${state.interactionMode === 'voice' ? 'Voice Practice' : 'Text Practice'}`,
-      `Configured Duration: ${state.config.durationMinutes} minutes`,
-      `Actual Elapsed: ${formattedDuration}`,
-      `Interrupted Turns: ${metrics.interruptedTurnsCount}`,
-      `Total Turns Recorded: ${totalTurns}`,
-      `Exported At: ${new Date().toLocaleString()}`,
-      '----------------------------------------------------'
-    ];
-
-    const transcriptLines = state.transcript.flatMap((turn) => {
-      const time = formatRelativeTime(turn.relativeTimestampMs);
-      const tag = turn.isDemoResponse ? ' [Demo Response]' : '';
-      const interruptedTag = turn.deliveryStatus === 'interrupted' ? ' [Interrupted by candidate]' : '';
-      const textToExport =
-        turn.deliveryStatus === 'interrupted' && turn.deliveredText
-          ? turn.deliveredText
-          : turn.text;
-      return [
-        `[${time}] ${turn.speakerName} (${turn.speakerRole})${tag}${interruptedTag}:`,
-        `  "${textToExport}"`,
-        ''
-      ];
-    });
-
-    const blob = new Blob([[...headerLines, '', ...transcriptLines].join('\n')], {
-      type: 'text/plain;charset=utf-8'
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `gd-arena-transcript-${Date.now()}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const studentParticipant = state.participants.find((p) => p.role === 'student');
-  const moderatorParticipant = state.participants.find((p) => p.role === 'moderator');
-  const peerParticipants = state.participants.filter(
-    (p) => p.role !== 'student' && p.role !== 'moderator'
-  );
+  const alternative = report?.alternativeOpportunity;
+  const alternativeTurn = alternative ? state.transcript.find((t) => t.id === alternative.targetTurnId) : undefined;
 
   return (
-    <div className="min-h-screen bg-[#0c0c0e] text-zinc-100 flex flex-col justify-between">
-      {/* Top Header */}
-      <header className="border-b border-[#27272a] bg-[#0c0c0e]/90 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-100 font-bold text-xs">
-              GD
-            </div>
-            <div>
-              <span className="font-semibold text-base text-white">GD Arena</span>
-              <span className="ml-2 text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
-                Phase 4 Evidence Report
-              </span>
-            </div>
+    <div className="min-h-screen bg-paper font-body text-ink selection:bg-marigold-soft">
+      {/* Top bar */}
+      <header className="sticky top-0 z-30 border-b border-hair bg-paper/95 backdrop-blur-sm">
+        <div className="mx-auto flex h-16 max-w-[1120px] items-center justify-between gap-3 px-4 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-forest text-[11px] font-bold tracking-wide text-paper">GD</span>
+            <span className="hidden font-serif text-xl font-semibold tracking-tight sm:inline">GD Arena</span>
+            <span className="hidden rounded bg-paper-2 px-2 py-0.5 text-xs font-medium text-muted sm:inline">Your report</span>
           </div>
-
           <div className="flex items-center gap-2">
+            <DownloadMenu
+              onMarkdown={() => downloadMarkdownReport(exportInput)}
+              onTranscript={() => downloadTranscript(exportInput)}
+              onJson={() => downloadSessionJson(exportInput)}
+            />
             <button
-              onClick={resetSession}
+              type="button"
               id="practise-again-top-btn"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 font-semibold text-xs transition"
+              onClick={resetSession}
+              className="flex h-10 cursor-pointer items-center gap-2 whitespace-nowrap rounded-lg bg-forest px-4 text-sm font-medium text-paper hover:bg-forest-hover"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
+              <RotateCcw className="h-4 w-4" />
               <span>Practise again</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex-1 w-full space-y-6">
-        {/* Completion Banner */}
-        <div className="p-6 rounded-2xl bg-[#141417] border border-[#27272a] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 flex items-center justify-center shrink-0 mt-0.5">
-              <CheckCircle2 className="w-5 h-5 text-zinc-200" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                  Group Discussion Completed
-                </h1>
-                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
-                  {metrics.isVoiceMode ? 'Live Voice' : 'Text-Only'} Mode
-                </span>
-                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800">
-                  {metrics.isDemoMode ? 'Scripted Demo Panel' : 'Live AI (Groq + Gemini)'}
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm text-zinc-400 mt-1.5">
-                Topic: <span className="text-zinc-200 font-medium">&ldquo;{state.config.topic}&rdquo;</span>
-              </p>
-            </div>
+      <main className="mx-auto max-w-[1120px] space-y-6 px-4 py-8 sm:px-6 sm:py-10">
+        {/* Overview */}
+        <section className="grid grid-cols-1 gap-6 rounded-2xl bg-forest p-5 text-paper sm:p-8 lg:grid-cols-[1.4fr_1fr] [&>*]:min-w-0">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-on-forest-muted">Group discussion report</p>
+            <h1 className="mt-3 font-serif text-[clamp(1.9rem,4vw,2.9rem)] font-semibold leading-[1.1] tracking-[-0.01em]">{headline}</h1>
+            <p className="mt-3 max-w-xl text-base leading-relaxed text-on-forest-muted">{subline}</p>
+            <p className="mt-6 text-xs font-medium uppercase tracking-[0.14em] text-on-forest-muted">Topic</p>
+            <p className="mt-1 font-serif text-lg leading-snug">{state.config.topic}</p>
+            <ul className="mt-5 flex list-none flex-wrap gap-2 p-0 text-xs">
+              {[
+                formatSpan(durationMs) + ' discussion',
+                `${state.participants.length - 2} AI peers + moderator`,
+                state.config.language === 'hinglish' ? 'Hinglish' : 'English',
+                metrics.isVoiceMode ? 'Voice' : 'Text',
+                ...(metrics.isDemoMode ? ['Demo panel'] : []),
+              ].map((chip) => (
+                <li key={chip} className="rounded-full bg-white/10 px-3 py-1">{chip}</li>
+              ))}
+            </ul>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap sm:flex-nowrap">
-            <button
-              onClick={handleDownloadMarkdownReport}
-              id="download-markdown-report-btn"
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition"
-              title="Download structured report as Markdown"
-            >
-              <Download className="w-4 h-4 text-zinc-400" />
-              <span>Report (.md)</span>
-            </button>
-
-            <button
-              onClick={handleDownloadJSON}
-              id="download-json-btn"
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition"
-              title="Download session & metrics JSON"
-            >
-              <Download className="w-4 h-4 text-zinc-400" />
-              <span>Data (.json)</span>
-            </button>
-
-            <button
-              onClick={resetSession}
-              id="practise-again-btn"
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-bold transition"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>Practise again</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Overview Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
-              <Clock className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Elapsed Duration</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">{formattedDuration}</p>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
-              {state.config.durationMinutes}m target limit
-            </p>
-          </div>
-
-          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
-              <MessageSquare className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Total Turns</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">{totalTurns}</p>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
-              {metrics.turnCountsBySpeaker[studentParticipant?.id || ''] || 0} student turns
-            </p>
-          </div>
-
-          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
-              <Mic className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Candidate Voice Time</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">
-              {metrics.isVoiceMode
-                ? formatDurationMs(metrics.studentSpeakingDurationMs)
-                : 'Unavailable'}
-            </p>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
-              {metrics.isVoiceMode ? 'Approx. VAD voice interval' : 'Text-only session'}
-            </p>
-          </div>
-
-          <div className="p-5 rounded-xl bg-[#141417] border border-[#27272a] flex flex-col justify-between">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-1">
-              <Volume2 className="w-3.5 h-3.5 text-zinc-400" />
-              <span>AI Audio Time</span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold text-white tracking-tight my-1">
-              {metrics.isVoiceMode
-                ? formatDurationMs(
-                    Object.values(metrics.aiPlaybackDurationMs).reduce((a, b) => a + b, 0)
-                  )
-                : 'Unavailable'}
-            </p>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
-              {metrics.isVoiceMode ? 'Actual delivered playback' : 'Text-only session'}
-            </p>
-          </div>
-        </div>
-
-        {/* Deterministic Participation & Speaking Share Breakdown */}
-        <section className="p-5 sm:p-6 rounded-2xl bg-[#141417] border border-[#27272a] space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
-            <div>
-              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-zinc-300" />
-                Participation & Speaking Share Breakdown
-              </h2>
-              <p className="text-[11px] text-zinc-500 mt-0.5">
-                Calculated deterministically in code. Denominator:{' '}
-                <span className="text-zinc-300 font-medium">
-                  {metrics.isVoiceMode
-                    ? `${formatDurationMs(metrics.totalActiveSpeakingDurationMs)} active speaking duration across all speakers`
-                    : `${metrics.totalTurns} total committed turns`}
-                </span>
-                {'. Overlap and silence occur; higher share does not imply better performance.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Student Row */}
-          {studentParticipant && (
-            <div className="p-3.5 rounded-xl border bg-zinc-900/60 border-zinc-700 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${studentParticipant.avatarColor}`}
-                  >
-                    {studentParticipant.initials}
-                  </div>
-                  <div>
-                    <span className="font-semibold text-zinc-100">You (Candidate)</span>
-                    <span className="text-[10px] text-zinc-400 ml-2">
-                      {metrics.turnCountsBySpeaker[studentParticipant.id] || 0} turns
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-right flex items-center gap-3">
-                  <span className="font-mono text-zinc-400 text-xs">
-                    {metrics.isVoiceMode
-                      ? `${formatDurationMs(metrics.studentSpeakingDurationMs)} (VAD)`
-                      : 'Text mode'}
-                  </span>
-                  <span className="font-mono font-bold text-white text-sm">
-                    {metrics.speakingSharePercent[studentParticipant.id] || 0}% share
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
-                <div
-                  className="h-full bg-zinc-100 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(100, metrics.speakingSharePercent[studentParticipant.id] || 0)}%`
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* AI Debaters Grid / List */}
-          <div className="space-y-2.5 pt-1">
-            <p className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">
-              AI Discussion Participants
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {peerParticipants.map((p) => {
-                const turns = metrics.turnCountsBySpeaker[p.id] || 0;
-                const durMs = metrics.aiPlaybackDurationMs[p.id] || 0;
-                const share = metrics.speakingSharePercent[p.id] || 0;
-
-                return (
-                  <div
-                    key={p.id}
-                    className="p-3 rounded-xl border bg-zinc-900/40 border-zinc-800 space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] ${p.avatarColor}`}
-                        >
-                          {p.initials}
-                        </div>
-                        <div>
-                          <span className="font-medium text-zinc-200">{p.name}</span>
-                          <span className="text-[10px] text-zinc-500 ml-1.5">{p.personality}</span>
-                        </div>
-                      </div>
-
-                      <div className="text-right">
-                        <span className="font-mono font-semibold text-zinc-300 text-xs">
-                          {share}%
+          {/* Skill snapshot */}
+          <div className="rounded-xl bg-paper p-5 text-ink">
+            <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted">Skill snapshot</p>
+            {report ? (
+              <>
+                <ul className="mt-3 list-none space-y-2 p-0">
+                  {report.dimensions.map((d) => {
+                    const style = RATING_STYLES[d.rating] ?? RATING_STYLES['Not observed'];
+                    const Icon = style.icon;
+                    return (
+                      <li key={d.id} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="min-w-0 truncate">{d.name}</span>
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ background: style.bg, color: style.fg }}>
+                          <Icon className="h-3 w-3" aria-hidden="true" />
+                          {style.label}
                         </span>
-                      </div>
-                    </div>
-
-                    <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                      <div
-                        className="h-full bg-zinc-400 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, share)}%` }}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
-                      <span>{turns} {turns === 1 ? 'turn' : 'turns'}</span>
-                      <span>{metrics.isVoiceMode ? formatDurationMs(durMs) : 'Text'}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Separate Moderator Row */}
-          {moderatorParticipant && (
-            <div className="p-3 rounded-xl border bg-zinc-900/30 border-zinc-800 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] ${moderatorParticipant.avatarColor}`}
-                >
-                  {moderatorParticipant.initials}
-                </div>
-                <div>
-                  <span className="font-semibold text-zinc-200">
-                    {moderatorParticipant.name} (Moderator)
-                  </span>
-                  <span className="text-[10px] text-zinc-500 ml-2">
-                    {metrics.turnCountsBySpeaker[moderatorParticipant.id] || 0} framing & transition turns
-                  </span>
-                </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {topStrength && (
+                  <p className="mt-4 border-t border-hair pt-3 text-sm">
+                    <span className="font-semibold">Best skill: </span>
+                    {topStrength.name}
+                  </p>
+                )}
+              </>
+            ) : isGeneratingReport ? (
+              <div className="mt-3 space-y-2" aria-busy="true">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div key={i} className="h-5 animate-pulse rounded bg-paper-2" />
+                ))}
+                <p className="pt-2 text-xs text-muted">Reading the transcript and checking every quote…</p>
               </div>
-
-              <div className="flex items-center gap-3 text-right">
-                <span className="font-mono text-zinc-500 text-[11px]">
-                  {metrics.isVoiceMode
-                    ? formatDurationMs(metrics.moderatorPlaybackDurationMs)
-                    : 'Text mode'}
-                </span>
-                <span className="font-mono text-zinc-300 font-medium text-xs">
-                  {metrics.speakingSharePercent[moderatorParticipant.id] || 0}% share
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Timing & Flow Milestones */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
-            <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
-              <span className="text-[11px] text-zinc-500 block mb-0.5">First Contribution</span>
-              <span className="font-semibold text-zinc-200">
-                {metrics.studentFirstContributionSecs !== null
-                  ? `${metrics.studentFirstContributionSecs}s into discussion`
-                  : 'Did not volunteer'}
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
-              <span className="text-[11px] text-zinc-500 block mb-0.5">Closing Phase</span>
-              <span
-                className={`font-semibold ${
-                  metrics.studentContributedInClosing ? 'text-zinc-200' : 'text-zinc-500'
-                }`}
-              >
-                {metrics.studentContributedInClosing
-                  ? 'Contributed in closing'
-                  : 'Did not speak in closing'}
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800">
-              <span className="text-[11px] text-zinc-500 block mb-0.5">
-                Barge-In / Interruption Overlaps
-              </span>
-              <span className="font-semibold text-amber-300">
-                {metrics.interruptedTurnsCount}{' '}
-                {metrics.interruptedTurnsCount === 1 ? 'overlap event' : 'overlap events'}
-              </span>
-            </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted">Coaching isn&apos;t available yet. See below.</p>
+            )}
           </div>
         </section>
 
-        {/* Phase 4 Qualitative Evidence-Backed Feedback Section */}
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-zinc-300" />
-                <h2 className="text-base font-bold text-white tracking-tight">
-                  Evidence-Backed Coaching Evaluation
-                </h2>
-              </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Evaluated strictly against observable behaviours. All strengths and coaching tips are verified with verbatim transcript quotes.
-              </p>
-            </div>
+        {/* Key numbers */}
+        <section aria-label="Key numbers" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile label="Your share" value={`${yourShare}%`} hint={`Even split ≈ ${evenSplit}%`} />
+          <StatTile label="Times you spoke" value={String(yourTurns)} hint={`of ${metrics.totalTurns} turns in total`} />
+          <StatTile
+            label="First point"
+            value={metrics.studentFirstContributionSecs !== null ? formatClock(metrics.studentFirstContributionSecs * 1000) : '—'}
+            hint={metrics.studentFirstContributionSecs !== null ? 'minutes into the discussion' : 'You did not speak'}
+          />
+          <StatTile
+            label="Closing round"
+            value={metrics.studentContributedInClosing ? 'Spoke' : 'Missed'}
+            hint={metrics.studentContributedInClosing ? 'You helped wrap up' : 'Summarising at the end scores well'}
+          />
+        </section>
 
+        <Section
+          title="Who held the floor"
+          description="Higher isn't automatically better; strong candidates speak enough to be heard and leave room for others."
+        >
+          <AirtimeChart participants={state.participants} metrics={metrics} />
+        </Section>
+
+        <Section title="How the discussion flowed" description="Spot when you joined in, and the stretches where you stayed quiet.">
+          <DiscussionTimeline
+            participants={state.participants}
+            transcript={state.transcript}
+            durationMs={durationMs}
+            onSelectTurn={scrollToTurn}
+          />
+        </Section>
+
+        {/* Coaching */}
+        <Section
+          id="coaching"
+          title="Your six GD skills"
+          description="Rated from what you actually said. Every quote is checked word-for-word against the transcript."
+          action={
             <div className="flex items-center gap-2">
-              {isReportStale && (
-                <span className="text-[10px] text-amber-400 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-full">
-                  Report stale
-                </span>
-              )}
+              {isReportStale && <span className="rounded bg-marigold-soft px-2 py-0.5 text-xs font-medium">Out of date</span>}
               <button
+                type="button"
+                id="regenerate-report-btn"
                 onClick={() => generateReport(true)}
                 disabled={isGeneratingReport}
-                id="regenerate-report-btn"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium transition disabled:opacity-50"
+                className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-hair bg-card px-3 text-sm font-medium text-ink hover:border-muted/40 disabled:cursor-wait disabled:opacity-50"
               >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 ${isGeneratingReport ? 'animate-spin' : ''}`}
-                />
-                <span>{report ? 'Regenerate feedback' : 'Generate feedback'}</span>
+                <RefreshCw className={`h-3.5 w-3.5 ${isGeneratingReport ? 'animate-spin' : ''}`} />
+                {report ? 'Regenerate' : 'Generate'}
               </button>
             </div>
-          </div>
-
-          {/* Loading State */}
+          }
+        >
           {isGeneratingReport && (
-            <div className="p-8 rounded-2xl bg-[#141417] border border-[#27272a] flex flex-col items-center justify-center text-center space-y-3">
-              <div className="w-10 h-10 rounded-full border-2 border-zinc-800 border-t-zinc-200 animate-spin" />
-              <div>
-                <h3 className="font-semibold text-sm text-white">
-                  Synthesizing Evidence & Verifying Quotes...
-                </h3>
-                <p className="text-xs text-zinc-400 mt-1 max-w-md">
-                  Analyzing candidate initiations, argument quality, collaborative listening, and matching verbatim transcript turns with zero hallucinated timestamps.
+            <div className="grid gap-4 md:grid-cols-2" aria-busy="true">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="h-48 animate-pulse rounded-xl border border-hair bg-paper" />
+              ))}
+            </div>
+          )}
+
+          {reportError && !isGeneratingReport && (
+            <div role="alert" className="flex flex-col gap-3 rounded-xl border border-danger/25 bg-[#f3ddd8]/60 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <span className="flex items-start gap-2.5">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+                <span>
+                  {reportError} Your numbers, chart and transcript above are unaffected.
+                </span>
+              </span>
+              <button type="button" onClick={() => generateReport(true)} className="shrink-0 cursor-pointer rounded-lg bg-forest px-3 py-1.5 font-medium text-paper">
+                Try again
+              </button>
+            </div>
+          )}
+
+          {report && !isGeneratingReport && (
+            <div className="grid gap-4 md:grid-cols-2">
+              {report.dimensions.map((dim, i) => (
+                <SkillCard key={dim.id} dimension={dim} index={i} onSelectTurn={scrollToTurn} />
+              ))}
+            </div>
+          )}
+        </Section>
+
+        {/* What you could have said */}
+        {alternative && !isGeneratingReport && (
+          <Section
+            title="What you could have said"
+            description="A moment where you had an opening. This is a suggested line for practice, not something you said."
+          >
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl bg-paper p-5">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted">
+                  {alternative.speakerName} said · {formatClock(alternativeTurn?.relativeTimestampMs ?? 0)}
+                </p>
+                <p className="mt-2 text-[15px] leading-relaxed text-ink">
+                  {alternativeTurn ? alternativeTurn.deliveredText || alternativeTurn.text : alternative.opportunityContext}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => scrollToTurn(alternative.targetTurnId)}
+                  className="mt-3 flex cursor-pointer items-center gap-1 text-sm font-medium text-forest hover:underline"
+                >
+                  See it in the transcript <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="rounded-xl border-2 border-marigold bg-marigold-soft/40 p-5">
+                <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-ink">
+                  <MessageSquareQuote className="h-4 w-4" aria-hidden="true" />
+                  You could have said
+                </p>
+                <p className="mt-2 font-serif text-lg italic leading-relaxed text-ink">&ldquo;{alternative.suggestedSpeech}&rdquo;</p>
+                <p className="mt-3 text-sm text-muted">
+                  <span className="font-medium text-ink">Why it works: </span>
+                  {alternative.opportunityContext}
                 </p>
               </div>
             </div>
-          )}
+          </Section>
+        )}
 
-          {/* Error Banner */}
-          {reportError && !isGeneratingReport && (
-            <div className="p-4 rounded-xl bg-[#181111] border border-red-900/50 flex items-start justify-between gap-3 text-xs text-red-200">
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                <div>
-                  <strong>Report Generation Notice:</strong> {reportError}
-                  <p className="text-[11px] text-red-300/80 mt-0.5">
-                    Your session metrics and transcript above are fully preserved and calculated locally.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => generateReport(true)}
-                className="shrink-0 px-3 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 text-xs font-medium"
-              >
-                Retry
-              </button>
-            </div>
-          )}
+        {/* Action plan */}
+        {focusAreas.length > 0 && !isGeneratingReport && (
+          <Section title="Your plan for the next round" description="Practise these, in this order.">
+            <ol className="m-0 list-none space-y-3 p-0">
+              {focusAreas.map((d, i) => (
+                <li key={d.id} className="flex gap-4 rounded-xl bg-paper p-4">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-forest text-sm font-semibold text-paper">{i + 1}</span>
+                  <span>
+                    <span className="block font-semibold text-ink">{d.name}</span>
+                    <span className="mt-1 block text-sm leading-relaxed text-ink">{d.actionableImprovement}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </Section>
+        )}
 
-          {/* Six Dimension Cards Grid */}
-          {report && !isGeneratingReport && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {report.dimensions.map((dim) => {
-                const badge = getRatingBadge(dim.rating);
-
+        {/* Transcript */}
+        <Section
+          title="Full transcript"
+          description={`${state.transcript.length} turns. Quotes above link here.`}
+          action={
+            <button
+              type="button"
+              onClick={() => setIsTranscriptOpen((v) => !v)}
+              aria-expanded={isTranscriptOpen}
+              className="flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-hair bg-card px-3 text-sm font-medium text-ink hover:border-muted/40"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              {isTranscriptOpen ? 'Hide' : 'Show'}
+            </button>
+          }
+        >
+          {isTranscriptOpen ? (
+            <ol className="m-0 list-none space-y-4 p-0">
+              {state.transcript.map((turn) => {
+                const isStudent = turn.speakerRole === 'student';
+                const isCut = turn.deliveryStatus === 'interrupted';
+                const participant = state.participants.find((p) => p.id === turn.speakerId) ?? {
+                  id: turn.speakerId,
+                  name: turn.speakerName,
+                  initials: turn.speakerName.slice(0, 2).toUpperCase(),
+                };
                 return (
-                  <div
-                    key={dim.id}
-                    className="p-5 rounded-2xl bg-[#141417] border border-[#27272a] flex flex-col justify-between space-y-4 hover:border-zinc-700 transition"
+                  <li
+                    key={turn.id}
+                    id={`turn-${turn.id}`}
+                    className={`flex gap-3 rounded-lg p-2 transition-colors duration-500 ${highlightedTurnId === turn.id ? 'bg-marigold-soft' : ''}`}
                   >
-                    <div>
-                      {/* Dimension Header */}
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="font-bold text-sm text-white leading-snug">
-                          {dim.name}
-                        </h3>
-                        <span
-                          className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border shrink-0 font-mono ${badge.className}`}
-                        >
-                          {badge.label}
-                        </span>
-                      </div>
-
-                      {/* Observation */}
-                      <p className="text-xs text-zinc-300 leading-relaxed mb-3">
-                        {dim.observation}
+                    <PersonaAvatar participant={participant} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-baseline gap-2 text-sm">
+                        <span className="font-semibold">{isStudent ? 'You' : turn.speakerName}</span>
+                        <span className="text-xs tabular-nums text-muted">{formatClock(turn.relativeTimestampMs)}</span>
+                        {isCut && <span className="text-xs font-medium text-danger">cut off</span>}
                       </p>
-
-                      {/* Actionable Advice */}
-                      <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                        <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold block mb-1">
-                          Actionable Improvement
-                        </span>
-                        <p className="text-xs text-zinc-300 leading-relaxed">
-                          {dim.actionableImprovement}
-                        </p>
-                      </div>
+                      <p className={`mt-1 rounded-lg px-3 py-2 text-[15px] leading-relaxed ${isStudent ? 'bg-marigold-soft/60' : 'bg-paper'}`}>
+                        {isCut && turn.deliveredText ? turn.deliveredText : turn.text}
+                      </p>
                     </div>
-
-                    {/* Verbatim Evidence Chips */}
-                    {dim.evidence && dim.evidence.length > 0 ? (
-                      <div className="pt-2 border-t border-zinc-800/80 space-y-2">
-                        <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold block">
-                          Verified Verbatim Evidence ({dim.evidence.length})
-                        </span>
-                        <div className="space-y-1.5">
-                          {dim.evidence.map((ev, evIdx) => (
-                            <button
-                              key={`ev-${dim.id}-${ev.turnId}-${evIdx}`}
-                              onClick={() => scrollToTurn(ev.turnId)}
-                              className="w-full text-left p-2.5 rounded-lg bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition group"
-                              title="Click to jump to this turn in the transcript"
-                            >
-                              <div className="flex items-center justify-between text-[10px] text-zinc-300 font-mono mb-1">
-                                <span className="font-semibold">
-                                  {ev.speakerName || 'Candidate'} • Turn {ev.turnId}
-                                </span>
-                                <span className="flex items-center gap-1 text-zinc-400 group-hover:text-zinc-200 transition">
-                                  {formatRelativeTime(ev.relativeTimestampMs)}
-                                  <ExternalLink className="w-2.5 h-2.5" />
-                                </span>
-                              </div>
-                              <p className="text-xs text-zinc-300 italic line-clamp-2">
-                                &ldquo;{ev.quote}&rdquo;
-                              </p>
-                              <span className="text-[9px] text-zinc-400 group-hover:text-zinc-200 font-sans block mt-1 underline underline-offset-2">
-                                View in transcript
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="pt-2 border-t border-zinc-800/80 text-[11px] text-zinc-500 italic">
-                        {dim.rating === 'Not observed'
-                          ? 'No candidate opportunity or contribution was recorded for this dimension.'
-                          : 'No verbatim quote cited for this observation.'}
-                      </div>
-                    )}
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
+          ) : (
+            <p className="text-sm text-muted">Hidden to keep the report short. Clicking any quote opens it.</p>
           )}
+        </Section>
 
-          {/* Differentiator: "What you could have said" Card */}
-          {report?.alternativeOpportunity && !isGeneratingReport && (
-            <div className="p-5 sm:p-6 rounded-2xl bg-[#141417] border border-[#27272a] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-zinc-300" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-white">
-                      What You Could Have Said (Strategic Alternative)
-                    </h3>
-                    <p className="text-[11px] text-zinc-400">
-                      Concrete conversational pivot opportunity identified from peer exchanges.
-                    </p>
-                  </div>
-                </div>
+        <p className="px-2 text-center text-xs text-muted">{report?.disclaimer || DEFAULT_DISCLAIMER}</p>
 
-                <span className="text-[10px] font-mono uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-zinc-900 text-zinc-300 border border-zinc-800 font-medium">
-                  Objective: {report.alternativeOpportunity.objective}
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-300 space-y-2">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400 font-mono">
-                    Context: In response to{' '}
-                    <strong className="text-zinc-200">
-                      {report.alternativeOpportunity.speakerName}
-                    </strong>
-                  </span>
-                  <button
-                    onClick={() => scrollToTurn(report.alternativeOpportunity!.targetTurnId)}
-                    className="text-zinc-300 hover:text-white font-medium flex items-center gap-1 text-[11px] underline underline-offset-2"
-                  >
-                    <span>View peer turn {report.alternativeOpportunity.targetTurnId}</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
-                </div>
-
-                <p className="text-zinc-300 text-xs">
-                  {report.alternativeOpportunity.opportunityContext}
-                </p>
-
-                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 mt-2">
-                  <span className="text-[10px] text-zinc-400 uppercase tracking-wider font-bold block mb-1">
-                    Suggested Response (Model Alternative)
-                  </span>
-                  <p className="italic font-medium text-xs leading-relaxed">
-                    &ldquo;{report.alternativeOpportunity.suggestedSpeech}&rdquo;
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-[10px] text-zinc-500 italic">
-                *Note: This is an AI-suggested alternative phrase for practice, not something you actually said in the discussion.
-              </p>
-            </div>
-          )}
-
-          {/* Coaching Disclaimer */}
-          <p className="text-[11px] text-zinc-500 text-center italic py-1">
-            {report?.disclaimer ||
-              'AI-generated practice coaching based strictly on observable behaviours in this session; not an official placement assessment.'}
-          </p>
-        </section>
-
-        {/* Full Transcript Review Accordion / List */}
-        <section className="p-5 sm:p-6 rounded-2xl bg-[#141417] border border-[#27272a] space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                <FileText className="w-4 h-4 text-zinc-300" />
-                Full Transcript Review ({totalTurns} Turns)
-              </h2>
-              <p className="text-[11px] text-zinc-500 mt-0.5">
-                Target turns referenced in the report above can be highlighted directly below.
-              </p>
-            </div>
-
-            <button
-              onClick={handleDownloadTranscript}
-              className="text-xs text-zinc-400 hover:text-zinc-200 font-medium underline underline-offset-2 flex items-center gap-1"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Save .txt</span>
-            </button>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            {state.transcript.map((turn, idx) => {
-              const isInterrupted = turn.deliveryStatus === 'interrupted';
-              const isStudent = turn.speakerRole === 'student';
-              const isModerator = turn.speakerRole === 'moderator';
-              const isHighlighted = highlightedTurnId === turn.id;
-
-              return (
-                <div
-                  key={turn.id || `summary-turn-${idx}`}
-                  id={`turn-${turn.id}`}
-                  className={`p-3.5 rounded-xl border transition-all duration-300 ${getTranscriptTurnCardStyle(
-                    isHighlighted,
-                    isStudent,
-                    isModerator,
-                    isInterrupted
-                  )}`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`text-xs font-semibold ${getTranscriptSpeakerColor(
-                          isStudent,
-                          isModerator
-                        )}`}
-                      >
-                        {turn.speakerName}
-                      </span>
-                      {isStudent && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-200 border border-zinc-700 font-medium">
-                          You
-                        </span>
-                      )}
-                      {isModerator && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium">
-                          Moderator
-                        </span>
-                      )}
-                      {turn.source === 'model' && (
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-400 border border-zinc-800 font-mono">
-                          Gemini AI
-                        </span>
-                      )}
-                      {turn.source === 'scripted-demo' && (
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-800 font-mono">
-                          Demo response
-                        </span>
-                      )}
-                      {isInterrupted && (
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#1f1a14] text-amber-300 border border-amber-800/60 flex items-center gap-1 font-mono">
-                          <ShieldAlert className="w-2.5 h-2.5 text-amber-400" /> Interrupted by candidate
-                        </span>
-                      )}
-                      <span className="text-[10px] font-mono text-zinc-500">
-                        ID: {turn.id}
-                      </span>
-                    </div>
-
-                    <span className="text-[10px] font-mono text-zinc-500">
-                      {formatRelativeTime(turn.relativeTimestampMs)}
-                    </span>
-                  </div>
-
-                  <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed">
-                    {isInterrupted && turn.deliveredText ? turn.deliveredText : turn.text}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <div className="flex justify-center pb-4">
+          <button
+            type="button"
+            id="practise-again-btn"
+            onClick={resetSession}
+            className="flex h-12 cursor-pointer items-center gap-2 rounded-lg bg-marigold px-6 text-base font-semibold text-ink hover:bg-[#d6942f]"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Practise another round
+          </button>
+        </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-[#27272a] py-4 px-4 sm:px-6 text-center text-xs text-zinc-500">
-        GD Arena • Evidence-Backed Discussion Coaching & Verbatim Citations
-      </footer>
     </div>
   );
 }

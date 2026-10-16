@@ -48,7 +48,7 @@ export class GeminiDiscussionProvider implements IDiscussionProvider {
 
     if (!data.success) {
       if (data.isConfigured === false) {
-        const err = new Error(data.error || 'Gemini API key is not configured.');
+        const err = new Error(data.error || 'Live AI is not configured.');
         (err as Error & { isUnconfigured?: boolean }).isUnconfigured = true;
         throw err;
       }

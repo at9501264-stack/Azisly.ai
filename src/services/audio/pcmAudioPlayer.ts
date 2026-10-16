@@ -1,3 +1,5 @@
+import { getOutputTap } from "./audioLevelMeter";
+
 /**
  * High-performance, low-latency streaming PCM Audio Player for Gemini Live Speech-to-Speech.
  * Plays 24kHz 16-bit mono PCM chunks seamlessly using Web Audio API with zero buffering lag.
@@ -120,7 +122,7 @@ export class PcmAudioPlayer {
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(ctx.destination);
+    source.connect(getOutputTap(ctx));
 
     const now = ctx.currentTime;
     const startTime = Math.max(now, this.nextPlayTime);

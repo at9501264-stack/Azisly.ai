@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { GNANI_REST_URL, buildGnaniRequest, getGnaniApiKey } from '@/lib/gnaniVoice';
 
 interface RateLimitBucket {
   count: number;
@@ -59,6 +60,42 @@ interface SynthesisResult {
   error?: string;
   statusCode?: number;
   fatal?: boolean;
+}
+
+async function requestGnaniAudio(apiKey: string, options: SynthesisOptions): Promise<SynthesisResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(GNANI_REST_URL, {
+      method: 'POST',
+      headers: {
+        'X-API-Key-ID': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(buildGnaniRequest({ ...options, container: 'mp3' })),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      return { error: `Gnani TTS returned ${response.status}: ${errText.slice(0, 200)}`, statusCode: response.status };
+    }
+
+    const audio = Buffer.from(await response.arrayBuffer());
+    if (audio.length === 0) {
+      return { error: 'Gnani TTS returned empty audio.', statusCode: 502 };
+    }
+    return { audioBase64: audio.toString('base64') };
+  } catch (err: unknown) {
+    const isAbort = err instanceof Error && err.name === 'AbortError';
+    return {
+      error: isAbort ? 'Gnani TTS request timed out after 12s.' : err instanceof Error ? err.message : String(err),
+      statusCode: 504
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function requestSarvamAudio(apiKey: string, options: SynthesisOptions): Promise<SynthesisResult> {
@@ -124,10 +161,11 @@ export async function POST(req: NextRequest) {
     }
 
     const keyPool = getSarvamKeyPool();
-    if (keyPool.length === 0) {
+    const gnaniKey = getGnaniApiKey();
+    if (keyPool.length === 0 && !gnaniKey) {
       return NextResponse.json(
         {
-          error: 'SARVAM_API_KEY is not configured on the server. Please add SARVAM_API_KEY to .env.local to enable Sarvam AI voices.',
+          error: 'No voice synthesis key is configured on the server.',
           code: 'MISSING_API_KEY',
           configured: false
         },
@@ -158,21 +196,39 @@ export async function POST(req: NextRequest) {
       pace: targetPace
     };
 
+    const wordCount = trimmedText.split(/\s+/).length;
+    const durationEstimateMs = Math.max(Math.round((wordCount / (150 * targetPace)) * 60 * 1000), 1000);
+
     let lastError = 'Unknown error';
     let lastStatusCode = 502;
 
-    for (const activeKey of keyPool) {
-      const res = await requestSarvamAudio(activeKey, synthOptions);
+    // Primary voices: Gnani Vachana
+    if (gnaniKey) {
+      const res = await requestGnaniAudio(gnaniKey, synthOptions);
       if (res.audioBase64) {
-        const wordCount = trimmedText.split(/\s+/).length;
-        const durationEstimateMs = Math.round((wordCount / (150 * targetPace)) * 60 * 1000);
-
         return NextResponse.json({
           audioBase64: res.audioBase64,
           format: 'mp3',
           speaker: targetSpeaker,
           languageCode: targetLanguage,
-          durationEstimateMs: Math.max(durationEstimateMs, 1000)
+          durationEstimateMs
+        });
+      }
+      console.warn('[TTS] Gnani synthesis failed, trying backup voices:', res.error);
+      lastError = res.error || lastError;
+      lastStatusCode = res.statusCode || lastStatusCode;
+    }
+
+    // Backup voices: Sarvam key pool
+    for (const activeKey of keyPool) {
+      const res = await requestSarvamAudio(activeKey, synthOptions);
+      if (res.audioBase64) {
+        return NextResponse.json({
+          audioBase64: res.audioBase64,
+          format: 'mp3',
+          speaker: targetSpeaker,
+          languageCode: targetLanguage,
+          durationEstimateMs
         });
       }
 
@@ -185,7 +241,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: `All configured Sarvam keys failed. Last error: ${lastError}`, code: 'UPSTREAM_ERROR' },
+      { error: `All configured voice providers failed. Last error: ${lastError}`, code: 'UPSTREAM_ERROR' },
       { status: lastStatusCode }
     );
   } catch (err: unknown) {

@@ -41,6 +41,12 @@ export interface CalculateSessionMetricsParams {
   isDemoMode: boolean;
 }
 
+/** Approximate speaking time for a line of text at a natural ~150 words per minute. */
+function estimateSpokenMs(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.round((words / 2.5) * 1000);
+}
+
 export function calculateSessionMetrics(
   params: CalculateSessionMetricsParams
 ): DeterministicMetrics {
@@ -116,6 +122,7 @@ export function calculateSessionMetrics(
       }
     } else {
       // Aggregate playback duration recorded directly on turns
+      studentSpeakingDurationMs = 0;
       for (const turn of transcript) {
         const dur = turn.playbackDurationMs || 0;
         if (turn.speakerRole === 'moderator') {
@@ -123,9 +130,11 @@ export function calculateSessionMetrics(
         } else if (turn.speakerRole === 'ai_participant') {
           aiPlaybackDurationMs[turn.speakerId] =
             (aiPlaybackDurationMs[turn.speakerId] || 0) + dur;
+        } else if (turn.speakerRole === 'student') {
+          // Candidate turns carry no measured duration; approximate at ~150 words/min
+          studentSpeakingDurationMs += dur || estimateSpokenMs(turn.deliveredText || turn.text);
         }
       }
-      studentSpeakingDurationMs = 0;
     }
   } else {
     // In text-only mode, speech duration is null

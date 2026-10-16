@@ -1,194 +1,116 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { TranscriptTurn, Participant, ParticipantRole } from '@/types/session';
-import { MessageSquare, Bot, Volume2, ShieldAlert } from 'lucide-react';
+import { TranscriptTurn, Participant } from '@/types/session';
+import { PersonaAvatar } from '@/components/ui/PersonaAvatar';
+import { STUDENT_PARTICIPANT } from '@/constants/participants';
 
 interface TranscriptViewProps {
   readonly transcript: TranscriptTurn[];
   readonly participants: Participant[];
-  readonly activeSpeakerId: string | null;
-  readonly isVisible: boolean;
+  readonly activeSpeakerId?: string | null;
   readonly liveCaption?: string;
   readonly isGenerating?: boolean;
   readonly generatingSpeakerName?: string | null;
 }
 
-function getTurnCardStyle(role: ParticipantRole, isInterrupted?: boolean): string {
-  if (isInterrupted) return 'bg-[#181512] border-amber-800/40';
-  if (role === 'student') return 'bg-[#1a1a20] border-zinc-700 ml-2';
-  if (role === 'moderator') return 'bg-[#121215] border-zinc-800 mr-2';
-  return 'bg-[#101013] border-[#27272a] hover:border-zinc-700';
-}
-
-function getSpeakerNameColor(role: ParticipantRole): string {
-  if (role === 'student') return 'text-white font-semibold';
-  if (role === 'moderator') return 'text-zinc-200 font-semibold';
-  return 'text-zinc-300 font-medium';
+function formatTime(ms: number) {
+  const totalSecs = Math.floor(ms / 1000);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
 export function TranscriptView({
   transcript,
+  participants,
   activeSpeakerId,
-  isVisible,
   liveCaption,
   isGenerating,
-  generatingSpeakerName
-}: Readonly<TranscriptViewProps>) {
+  generatingSpeakerName,
+}: TranscriptViewProps) {
   const scrollEndRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new turns or live speech
+  // Keep the newest turn in view
   useEffect(() => {
-    if (isVisible && scrollEndRef.current) {
-      scrollEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [transcript.length, isVisible, activeSpeakerId, liveCaption, isGenerating]);
+    scrollEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [transcript.length, liveCaption, isGenerating]);
 
-  if (!isVisible) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center p-8 text-center text-zinc-500 bg-[#141417] rounded-xl border border-[#27272a]">
-        <MessageSquare className="w-8 h-8 mb-2 stroke-[1.5]" />
-        <p className="text-sm font-medium text-zinc-400">Live Captions & Transcript Hidden</p>
-        <p className="text-xs mt-1">Use the captions toggle button in controls to view live speech.</p>
-      </div>
-    );
-  }
-
-  // Format relative timestamp in mm:ss
-  const formatTime = (ms: number) => {
-    const totalSecs = Math.floor(ms / 1000);
-    const mins = Math.floor(totalSecs / 60);
-    const secs = totalSecs % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const findParticipant = (turn: TranscriptTurn) =>
+    participants.find((p) => p.id === turn.speakerId) ?? {
+      id: turn.speakerId,
+      name: turn.speakerName,
+      initials: turn.speakerName.slice(0, 2).toUpperCase(),
+    };
 
   return (
-    <div
-      ref={containerRef}
-      className="h-full flex flex-col bg-[#141417] rounded-xl border border-[#27272a] overflow-hidden"
-    >
-      {/* Transcript Header */}
-      <div className="px-4 py-3 bg-[#101013] border-b border-[#27272a] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-zinc-400" />
-          <span className="text-xs font-semibold text-zinc-200">Live GD Transcript</span>
-        </div>
-        <span className="text-[11px] text-zinc-500 font-mono">
-          {transcript.length} {transcript.length === 1 ? 'turn' : 'turns'} recorded
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between border-b border-hair px-4 py-3">
+        <h2 className="font-serif text-base font-semibold text-ink">Transcript</h2>
+        <span className="text-xs text-muted">
+          {transcript.length} {transcript.length === 1 ? 'turn' : 'turns'}
         </span>
       </div>
 
-      {/* Transcript Message List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
-        {transcript.length === 0 && !liveCaption ? (
-          <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-center p-6 text-zinc-400">
-            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-2 text-zinc-400">
-              <Bot className="w-5 h-5 text-zinc-400" />
-            </div>
-            <p className="text-sm font-medium text-zinc-300">Prof. Sharma is starting the discussion...</p>
-            <p className="text-xs text-zinc-500 mt-1 max-w-xs">
-              Listen to the opening topic and ground rules. You can also jump in with your voice or keyboard anytime!
-            </p>
-          </div>
-        ) : (
-          transcript.map((turn, index) => {
-            const isStudent = turn.speakerRole === 'student';
-            const isModerator = turn.speakerRole === 'moderator';
-            const isInterrupted = turn.deliveryStatus === 'interrupted';
-            const isInProgress = turn.deliveryState === 'in-progress';
-            const cardStyle = getTurnCardStyle(turn.speakerRole, isInterrupted);
-            const nameColor = getSpeakerNameColor(turn.speakerRole);
+      <ol className="m-0 flex-1 list-none space-y-4 overflow-y-auto px-4 py-4" aria-live="polite">
+        {transcript.length === 0 && !liveCaption && (
+          <li className="py-10 text-center text-sm text-muted">
+            Prof. Sharma is about to open the discussion…
+          </li>
+        )}
 
-            return (
-              <div
-                key={turn.id || `turn-${index}`}
-                id={`turn-${turn.id}`}
-                className={`p-3.5 rounded-xl border transition-colors ${cardStyle}`}
-              >
-                {/* Header row: Speaker Name, Badge, Time */}
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs ${nameColor}`}>{turn.speakerName}</span>
-                    <span
-                      className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border uppercase tracking-wider ${
-                        isStudent
-                          ? 'bg-zinc-800 text-zinc-200 border-zinc-700'
-                          : isModerator
-                          ? 'bg-zinc-900 text-zinc-300 border-zinc-800'
-                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                      }`}
-                    >
-                      {isStudent ? 'Candidate' : isModerator ? 'Moderator' : 'Peer'}
-                    </span>
-                  </div>
+        {transcript.map((turn, index) => {
+          const isStudent = turn.speakerRole === 'student';
+          const isInterrupted = turn.deliveryStatus === 'interrupted';
+          const isInProgress = turn.deliveryState === 'in-progress';
+          // A queued line isn't shown until its speaker is actually heard
+          const isQueued = isInProgress && turn.speakerId !== activeSpeakerId;
+          const text = isInterrupted && turn.deliveredText ? turn.deliveredText : turn.text;
 
-                  <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono">
-                    {isInterrupted && (
-                      <span className="flex items-center gap-1 text-amber-400 font-sans font-medium">
-                        <ShieldAlert className="w-3 h-3" />
-                        <span>Interrupted</span>
-                      </span>
-                    )}
-                    {isInProgress && (
-                      <span className="flex items-center gap-1 text-zinc-300">
-                        <Volume2 className="w-3 h-3 animate-pulse" />
-                        <span>Speaking...</span>
-                      </span>
-                    )}
-                    <span>{formatTime(turn.relativeTimestampMs)}</span>
-                  </div>
+          return (
+            <li key={turn.id || `turn-${index}`} id={`turn-${turn.id}`} className="flex gap-3">
+              <PersonaAvatar participant={findParticipant(turn)} size="sm" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-semibold text-ink">{isStudent ? 'You' : turn.speakerName}</span>
+                  <span className="text-[11px] tabular-nums text-muted">{formatTime(turn.relativeTimestampMs)}</span>
+                  {isInProgress && !isQueued && <span className="text-[11px] font-medium text-forest">speaking</span>}
+                  {isInterrupted && <span className="text-[11px] font-medium text-danger">cut off</span>}
                 </div>
-
-                {/* Turn Text */}
-                <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed font-sans">
-                  {turn.deliveryStatus === 'interrupted' && turn.deliveredText
-                    ? turn.deliveredText
-                    : turn.text}
+                <p
+                  className={`mt-1 rounded-lg px-3 py-2 text-sm leading-relaxed text-ink ${
+                    isStudent ? 'bg-marigold-soft' : 'bg-paper'
+                  }`}
+                >
+                  {isQueued ? <span className="italic text-muted">about to speak…</span> : text}
+                  {isInterrupted && turn.deliveredText && turn.deliveredText !== turn.text && <span className="text-muted"> —</span>}
                 </p>
-
-                {/* Unspoken tail indicator */}
-                {isInterrupted && turn.deliveredText && turn.deliveredText !== turn.text && (
-                  <p className="text-[10px] text-zinc-500 italic mt-1 border-t border-zinc-800/80 pt-1">
-                    (Audio was cut off mid-speech; remaining sentence excluded from room context)
-                  </p>
-                )}
               </div>
-            );
-          })
-        )}
+            </li>
+          );
+        })}
 
-        {/* Live speech feedback right inside transcript */}
         {Boolean(liveCaption) && (
-          <div className="p-3.5 rounded-xl border border-zinc-700 bg-[#16161c] ml-2 animate-pulse">
-            <div className="flex items-center justify-between gap-2 mb-1.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-white font-semibold">You (Candidate)</span>
-                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded border uppercase tracking-wider bg-zinc-800 text-zinc-200 border-zinc-700">
-                  Transcribing Live
-                </span>
+          <li className="flex gap-3">
+            <PersonaAvatar participant={STUDENT_PARTICIPANT} size="sm" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-sm font-semibold text-ink">You</span>
+                <span className="text-[11px] font-medium text-forest">transcribing…</span>
               </div>
-              <span className="text-[10px] text-zinc-400 font-mono flex items-center gap-1">
-                <Volume2 className="w-3 h-3 animate-pulse text-zinc-300" />
-                Live
-              </span>
+              <p className="mt-1 rounded-lg border border-dashed border-marigold bg-marigold-soft/50 px-3 py-2 text-sm italic leading-relaxed text-ink">
+                {liveCaption}
+              </p>
             </div>
-            <p className="text-xs sm:text-sm text-zinc-100 italic leading-relaxed font-sans">
-              &ldquo;{liveCaption}&rdquo;
-            </p>
-          </div>
+          </li>
         )}
 
-        {/* Peer formulating response indicator */}
         {Boolean(isGenerating) && (
-          <div className="p-3 rounded-xl border border-zinc-800/80 bg-[#121215] text-xs text-zinc-400 flex items-center gap-2 animate-pulse">
-            <div className="w-2 h-2 rounded-full bg-zinc-400 animate-ping" />
-            <span>{generatingSpeakerName || 'Next Speaker'} is preparing to respond...</span>
-          </div>
+          <li className="text-xs italic text-muted">{generatingSpeakerName || 'The next speaker'} is about to respond…</li>
         )}
 
         <div ref={scrollEndRef} />
-      </div>
+      </ol>
     </div>
   );
 }

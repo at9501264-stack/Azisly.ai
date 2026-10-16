@@ -1,26 +1,20 @@
 /**
- * Real-time Speech-to-Speech (S2S) Client Service for GD Arena.
+ * Real-time Speech-to-Speech (S2S) voice channel for GD Arena.
  *
- * Connects directly to Gemini 3.8 Live over WebSocket via local Voice Gateway.
- * Features:
- * - Ultra-low latency conversational dialogue (<800ms time-to-first-audio).
- * - Full-duplex raw audio streaming: 16kHz Linear16 mic input -> 24kHz Linear16 speaker output.
- * - Native Speech-to-Speech: No chaining delay between STT, LLM, and TTS.
- * - Real-time interleaved streaming transcription for live captions and evidence report.
- * - Sub-millisecond barge-in interruption detection.
+ * Connects to the Gemini Live model through the local Voice Gateway and gives
+ * every AI panelist (moderator and peers) a live model voice. Each turn is
+ * triggered with a text instruction; the model answers with streamed 24kHz PCM
+ * audio plus a live transcript for captions and the report.
+ *
+ * The candidate's microphone is NOT streamed here. Candidate speech is captured
+ * push-to-talk style by the speech recognition service, so the live model never
+ * answers on its own and the app stays in control of turn-taking.
  */
 
-import { Participant, LanguagePreference, AIPatience } from "@/types/session";
+import { Participant, LanguagePreference } from "@/types/session";
 import { pcmAudioPlayer } from "@/services/audio/pcmAudioPlayer";
 
 export interface S2SCallbacks {
-  onStatusChange?: (
-    status:
-      "idle" | "connecting" | "connected" | "speaking" | "listening" | "error",
-  ) => void;
-  onStudentSpeechStart?: () => void;
-  onStudentTranscriptPartial?: (text: string) => void;
-  onStudentTurnCommitted?: (text: string, durationMs: number) => void;
   onAiSpeechStart?: (speakerId: string, speakerName: string) => void;
   onAiTranscriptPartial?: (speakerId: string, text: string) => void;
   onAiTurnComplete?: (
@@ -33,30 +27,19 @@ export interface S2SCallbacks {
     deliveredText: string,
     playedDurationMs: number,
   ) => void;
-  onError?: (err: Error) => void;
+  /** The live voice model stopped being usable (quota, auth, network). */
+  onUnavailable?: (reason: string) => void;
 }
 
 export interface S2SOptions {
   topic: string;
   language: LanguagePreference;
-  patience: AIPatience;
   initialSpeaker?: Participant;
-}
-
-interface IAudioProcessorNode {
-  disconnect: () => void;
-  onaudioprocess:
-    | ((e: {
-        inputBuffer: { getChannelData: (channel: number) => Float32Array };
-      }) => void)
-    | null;
-  connect: (destination: AudioNode) => AudioNode;
 }
 
 interface S2SServerMessage {
   type: string;
   audio?: string;
-  mimeType?: string;
   speakerId?: string;
   speakerName?: string;
   text?: string;
@@ -67,116 +50,111 @@ interface S2SServerMessage {
   message?: string;
 }
 
+/** How long to wait for the gateway to confirm the live model accepted the session */
+const READY_TIMEOUT_MS = 6000;
+
 export class SpeechToSpeechService {
   private ws: WebSocket | null = null;
-  private mediaStream: MediaStream | null = null;
-  private audioContext: AudioContext | null = null;
-  private processor: IAudioProcessorNode | null = null;
   private callbacks: S2SCallbacks = {};
-  private options: S2SOptions = {
-    topic: "Group Discussion",
-    language: "english",
-    patience: "balanced",
-  };
 
   private isConnected = false;
-  private isStudentSpeaking = false;
-  private consecutiveStudentFrames = 0;
-  private studentSpeechStartTime = 0;
-  private accumulatedStudentTranscript = "";
+  /** Once the live model fails, stay on the fallback voices for this page session */
+  private isUnavailable = false;
   private currentAiSpeakerId: string | null = null;
   private currentAiSpeakerName = "";
   private currentAiDeliveredText = "";
   private aiTurnStartTime = 0;
-  private studentSilenceTimer: NodeJS.Timeout | null = null;
 
   public getIsConnected(): boolean {
-    return this.isConnected;
+    return this.isConnected && !this.isUnavailable;
   }
 
   public getIsAiSpeaking(): boolean {
     return pcmAudioPlayer.getIsPlaying();
   }
 
+  /** Resolves true only once the live model has actually accepted the session. */
   public async start(
     options: S2SOptions,
     callbacks: S2SCallbacks,
   ): Promise<boolean> {
-    if (typeof window === "undefined") return false;
+    if (typeof window === "undefined" || this.isUnavailable) return false;
 
-    this.options = options;
-    this.callbacks = callbacks;
     this.stop();
+    this.callbacks = callbacks;
 
-    try {
-      this.callbacks.onStatusChange?.("connecting");
+    const isHttps = window.location.protocol === "https:";
+    const defaultHost = `${window.location.hostname || "localhost"}:3001`;
+    const gatewayHost = process.env.NEXT_PUBLIC_VOICE_GATEWAY_URL || defaultHost;
+    const wsProto = isHttps ? "wss:" : "ws:";
 
-      // 1. Establish microphone access (16kHz Linear16 mono)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-          sampleRate: 16000,
-        },
-      });
-      this.mediaStream = stream;
+    const initialSpeaker = options.initialSpeaker;
+    const params = new URLSearchParams({
+      topic: options.topic,
+      language: options.language,
+      speaker_id: initialSpeaker?.id || "mod-1",
+      speaker_name: initialSpeaker?.name || "Prof. Sharma",
+      speaker_role: initialSpeaker?.role || "moderator",
+      voice_name: initialSpeaker?.voice?.geminiVoice || "Charon",
+    });
 
-      // 2. Connect to Voice Gateway S2S endpoint
-      const isHttps = window.location.protocol === "https:";
-      const defaultHost = `${window.location.hostname || "localhost"}:3001`;
-      const gatewayHost =
-        process.env.NEXT_PUBLIC_VOICE_GATEWAY_URL || defaultHost;
-      const wsProto = isHttps ? "wss:" : "ws:";
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const settle = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(readyTimer);
+        resolve(ok);
+      };
+      const readyTimer = setTimeout(() => {
+        console.warn("[S2SService] Live voice model did not become ready in time");
+        this.stop();
+        settle(false);
+      }, READY_TIMEOUT_MS);
 
-      const initialSpeaker = options.initialSpeaker;
-      const voiceName = initialSpeaker?.voice?.geminiVoice || "Puck";
-      const speakerId = initialSpeaker?.id || "ai-aarav";
-      const speakerName = initialSpeaker?.name || "Aarav";
-      const speakerRole = initialSpeaker?.role || "ai_participant";
-
-      const url = `${wsProto}//${gatewayHost}/s2s?topic=${encodeURIComponent(
-        options.topic,
-      )}&language=${encodeURIComponent(options.language)}&speaker_id=${encodeURIComponent(
-        speakerId,
-      )}&speaker_name=${encodeURIComponent(speakerName)}&speaker_role=${encodeURIComponent(
-        speakerRole,
-      )}&voice_name=${encodeURIComponent(voiceName)}`;
-
-      const ws = new WebSocket(url);
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(`${wsProto}//${gatewayHost}/s2s?${params.toString()}`);
+      } catch {
+        settle(false);
+        return;
+      }
       this.ws = ws;
 
-      ws.onopen = () => {
-        this.isConnected = true;
-        this.callbacks.onStatusChange?.("connected");
-        console.log("[S2SService] Connected to Voice Gateway S2S");
-      };
-
       ws.onmessage = (event) => {
+        let data: S2SServerMessage;
         try {
-          const data = JSON.parse(event.data);
-          this.handleServerMessage(data);
+          data = JSON.parse(event.data);
         } catch {
-          // Binary or non-json message
+          return;
         }
+        if (data.type === "status") {
+          if (data.ready) {
+            this.isConnected = true;
+            settle(true);
+          } else {
+            this.markUnavailable(data.message || "Live voice model unavailable");
+            settle(false);
+          }
+          return;
+        }
+        this.handleServerMessage(data);
       };
 
       ws.onerror = () => {
-        console.warn("[S2SService] Voice Gateway S2S connection error");
-        this.callbacks.onError?.(new Error("S2S Gateway connection failure"));
-        this.callbacks.onStatusChange?.("error");
+        console.warn("[S2SService] Voice Gateway connection error");
+        settle(false);
       };
 
       ws.onclose = () => {
+        const wasConnected = this.isConnected;
         this.isConnected = false;
-        this.callbacks.onStatusChange?.("idle");
+        settle(false);
+        if (wasConnected && this.ws === ws) {
+          this.callbacks.onUnavailable?.("Live voice connection closed");
+        }
       };
 
-      // 3. Setup Audio Capture Pipeline
-      await this.initMicrophoneCapture(stream);
-
-      // 4. Bind PCM Audio Player Callbacks
       pcmAudioPlayer.setCallbacks({
         onPlaybackStart: () => {
           if (this.currentAiSpeakerId) {
@@ -189,8 +167,10 @@ export class SpeechToSpeechService {
         onPlaybackEnd: () => {
           if (this.currentAiSpeakerId) {
             const dur = Math.max(0, Date.now() - this.aiTurnStartTime);
+            const speakerId = this.currentAiSpeakerId;
+            this.currentAiSpeakerId = null;
             this.callbacks.onAiTurnComplete?.(
-              this.currentAiSpeakerId,
+              speakerId,
               this.currentAiDeliveredText,
               dur,
             );
@@ -198,196 +178,54 @@ export class SpeechToSpeechService {
         },
         onInterrupted: (playedDurationMs) => {
           if (this.currentAiSpeakerId) {
+            const speakerId = this.currentAiSpeakerId;
+            this.currentAiSpeakerId = null;
             this.callbacks.onInterrupted?.(
-              this.currentAiSpeakerId,
+              speakerId,
               this.currentAiDeliveredText,
               playedDurationMs,
             );
           }
         },
       });
-
-      return true;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn("[S2SService] Failed to initialize S2S:", msg);
-      this.callbacks.onError?.(new Error(msg));
-      this.callbacks.onStatusChange?.("error");
-      return false;
-    }
-  }
-
-  private async initMicrophoneCapture(stream: MediaStream) {
-    const audioContext = new (
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext
-    )({
-      sampleRate: 16000,
     });
-    this.audioContext = audioContext;
-
-    const source = audioContext.createMediaStreamSource(stream);
-    const audioCtxWithProcessor = audioContext as unknown as {
-      createScriptProcessor: (
-        bufferSize: number,
-        inputChannels: number,
-        outputChannels: number,
-      ) => IAudioProcessorNode;
-    };
-
-    // 2048 samples @ 16kHz = ~128ms per packet
-    const processor = audioCtxWithProcessor.createScriptProcessor(2048, 1, 1);
-    this.processor = processor;
-
-    processor.onaudioprocess = (e) => {
-      const inputData = e.inputBuffer.getChannelData(0);
-
-      // Convert Float32 to Linear16 PCM
-      const pcm16 = new Int16Array(inputData.length);
-      let maxAmp = 0;
-      for (let i = 0; i < inputData.length; i++) {
-        const s = Math.max(-1, Math.min(1, inputData[i]));
-        pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        if (Math.abs(s) > maxAmp) maxAmp = Math.abs(s);
-      }
-
-      const isAiPlaying = pcmAudioPlayer.getIsPlaying();
-
-      // Energy-based VAD for student interruption & speech start
-      const SPEECH_THRESHOLD = isAiPlaying ? 0.22 : 0.05;
-
-      if (maxAmp > SPEECH_THRESHOLD) {
-        this.consecutiveStudentFrames++;
-        if (this.consecutiveStudentFrames >= 2 && !this.isStudentSpeaking) {
-          this.isStudentSpeaking = true;
-          this.studentSpeechStartTime = Date.now();
-
-          // If AI was speaking, immediately interrupt!
-          if (isAiPlaying) {
-            console.log(
-              "[S2SService] Candidate barge-in detected! Halting AI playback.",
-            );
-            pcmAudioPlayer.stop(true);
-          }
-
-          this.callbacks.onStudentSpeechStart?.();
-        }
-
-        if (this.studentSilenceTimer) {
-          clearTimeout(this.studentSilenceTimer);
-          this.studentSilenceTimer = null;
-        }
-      } else {
-        this.consecutiveStudentFrames = 0;
-        if (this.isStudentSpeaking && !this.studentSilenceTimer) {
-          const silenceDelay = this.getSilenceDelayMs();
-          this.studentSilenceTimer = setTimeout(() => {
-            this.handleStudentSpeechEnd();
-          }, silenceDelay);
-        }
-      }
-
-      // Send PCM audio chunk to Gateway
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        // While AI is speaking and user is quiet, don't stream acoustic echo
-        if (isAiPlaying && !this.isStudentSpeaking) return;
-
-        try {
-          this.ws.send(pcm16.buffer);
-        } catch {
-          // Socket write failed
-        }
-      }
-    };
-
-    source.connect(processor as unknown as AudioNode);
-    processor.connect(audioContext.destination);
   }
 
-  private getSilenceDelayMs(): number {
-    switch (this.options.patience) {
-      case "quick":
-        return 500;
-      case "patient":
-        return 1200;
-      case "balanced":
-      default:
-        return 800;
-    }
-  }
-
-  private handleStudentSpeechEnd() {
-    this.isStudentSpeaking = false;
-    this.studentSilenceTimer = null;
-    const durationMs = Math.max(600, Date.now() - this.studentSpeechStartTime);
-    const text = this.accumulatedStudentTranscript.trim();
-
-    if (text) {
-      this.callbacks.onStudentTurnCommitted?.(text, durationMs);
-      this.accumulatedStudentTranscript = "";
-    }
+  /** Stop using the live model for the rest of this page session. */
+  public markUnavailable(reason: string) {
+    if (this.isUnavailable) return;
+    this.isUnavailable = true;
+    this.isConnected = false;
+    console.warn("[S2SService] Live voice model unavailable:", reason);
+    this.callbacks.onUnavailable?.(reason);
   }
 
   private handleServerMessage(data: S2SServerMessage) {
     switch (data.type) {
       case "audio_chunk": {
-        if (data.audio) {
-          if (!pcmAudioPlayer.getIsPlaying()) {
-            this.aiTurnStartTime = Date.now();
-          }
-          this.currentAiSpeakerId = data.speakerId ?? null;
-          this.currentAiSpeakerName = data.speakerName || "AI Debater";
-          pcmAudioPlayer.feedChunk(data.audio);
+        // Ignore audio that arrives after the turn was interrupted or abandoned
+        if (!data.audio || !this.currentAiSpeakerId) return;
+        if (!pcmAudioPlayer.getIsPlaying()) {
+          this.aiTurnStartTime = Date.now();
         }
+        pcmAudioPlayer.feedChunk(data.audio);
         break;
       }
 
       case "output_transcript": {
-        if (data.text) {
+        if (data.text && this.currentAiSpeakerId) {
           this.currentAiDeliveredText += data.text;
           this.callbacks.onAiTranscriptPartial?.(
-            data.speakerId || this.currentAiSpeakerId || "ai",
+            this.currentAiSpeakerId,
             this.currentAiDeliveredText,
           );
         }
         break;
       }
 
-      case "input_transcript": {
-        if (data.text) {
-          this.accumulatedStudentTranscript += ` ${data.text}`;
-          this.callbacks.onStudentTranscriptPartial?.(
-            this.accumulatedStudentTranscript.trim(),
-          );
-        }
-        break;
-      }
-
-      case "interrupted": {
-        const playedMs = pcmAudioPlayer.stop(true);
-        this.callbacks.onInterrupted?.(
-          data.speakerId || this.currentAiSpeakerId || "ai",
-          data.deliveredText || this.currentAiDeliveredText,
-          playedMs,
-        );
-        this.currentAiDeliveredText = "";
-        break;
-      }
-
       case "turn_complete": {
-        // Will also be triggered when audio finishes, but sync text here
-        if (data.deliveredText) {
+        if (data.deliveredText && this.currentAiSpeakerId) {
           this.currentAiDeliveredText = data.deliveredText;
-        }
-        break;
-      }
-
-      case "status": {
-        if (data.ready) {
-          console.log(
-            `[S2SService] Server S2S ready: ${data.model} (${data.voice})`,
-          );
         }
         break;
       }
@@ -399,17 +237,12 @@ export class SpeechToSpeechService {
     }
   }
 
-  /**
-   * Triggers the next AI participant's turn in Speech-to-Speech mode.
-   * Model immediately synthesizes audio directly from prompt instruction.
-   */
+  /** Ask the live model to speak the next turn in this panelist's voice. */
   public triggerAiTurn(speaker: Participant, instruction?: string) {
     this.currentAiSpeakerId = speaker.id;
     this.currentAiSpeakerName = speaker.name;
     this.currentAiDeliveredText = "";
     this.aiTurnStartTime = Date.now();
-
-    const voiceName = speaker.voice?.geminiVoice || "Puck";
 
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(
@@ -419,32 +252,26 @@ export class SpeechToSpeechService {
           speakerName: speaker.name,
           role: speaker.role,
           personality: speaker.personality,
-          voiceName,
+          voiceName: speaker.voice?.geminiVoice || "Puck",
           instruction,
         }),
       );
+    } else {
+      this.markUnavailable("Live voice connection is not open");
     }
   }
 
-  /**
-   * Sends candidate text turn directly to the S2S model.
-   */
-  public sendStudentText(text: string) {
-    if (this.ws?.readyState === WebSocket.OPEN && text.trim()) {
-      this.ws.send(
-        JSON.stringify({
-          type: "student_text",
-          text: text.trim(),
-        }),
-      );
-    }
+  /** Abandon a turn that never started speaking (e.g. watchdog timeout). */
+  public abandonPendingTurn() {
+    this.currentAiSpeakerId = null;
+    this.currentAiDeliveredText = "";
+    pcmAudioPlayer.stop(false);
   }
 
-  /**
-   * Interrupts current speaker immediately.
-   */
+  /** Stops the current speaker immediately but keeps the connection open. */
   public interruptCurrentSpeaker(): number {
     const playedMs = pcmAudioPlayer.stop(true);
+    this.currentAiSpeakerId = null;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: "interrupt" }));
     }
@@ -454,47 +281,17 @@ export class SpeechToSpeechService {
   public stop() {
     pcmAudioPlayer.stop(false);
 
-    if (this.studentSilenceTimer) {
-      clearTimeout(this.studentSilenceTimer);
-      this.studentSilenceTimer = null;
-    }
-
     if (this.ws) {
-      try {
-        this.ws.close();
-      } catch {
-        // Ignore
-      }
+      const ws = this.ws;
       this.ws = null;
-    }
-
-    if (this.processor) {
       try {
-        this.processor.disconnect();
+        ws.close();
       } catch {
         // Ignore
       }
-      this.processor = null;
-    }
-
-    if (this.audioContext && this.audioContext.state !== "closed") {
-      try {
-        void this.audioContext.close();
-      } catch {
-        // Ignore
-      }
-      this.audioContext = null;
-    }
-
-    if (this.mediaStream) {
-      for (const track of this.mediaStream.getTracks()) {
-        track.stop();
-      }
-      this.mediaStream = null;
     }
 
     this.isConnected = false;
-    this.isStudentSpeaking = false;
     this.currentAiSpeakerId = null;
     this.currentAiDeliveredText = "";
   }

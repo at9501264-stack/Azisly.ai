@@ -70,7 +70,20 @@ interface SessionContextType {
   reportError: string | null;
   isReportStale: boolean;
   generateReport: (forceRegenerate?: boolean) => Promise<void>;
+  /** Shown when premium voices are unavailable and a fallback voice is in use */
+  voiceNotice: string | null;
 }
+
+/**
+ * The Gemini Live speech-to-speech channel is opt-in. By default every panelist
+ * speaks through the reply model + voice synthesis pipeline, which keeps full
+ * discussion context and gives each persona its own voice.
+ */
+const LIVE_S2S_ENABLED = process.env.NEXT_PUBLIC_ENABLE_LIVE_S2S === "true";
+/** Give up on a live-voice turn that hasn't produced audio within this time */
+const S2S_FIRST_AUDIO_TIMEOUT_MS = 8000;
+const FALLBACK_VOICE_NOTICE =
+  "Premium voices are unavailable right now, so the panel is using your browser's voices.";
 
 const DEFAULT_CONFIG: RoomConfig = {
   topic: PRESET_TOPICS[0].title,
@@ -93,6 +106,13 @@ function getStudentOpportunityPauseMs(patience: AIPatience): number {
   if (patience === "quick") return 3000;
   if (patience === "patient") return 5500;
   return 4000;
+}
+
+// Voice mode: the candidate can interrupt any time, so hand-offs only need a natural breath
+function getVoiceOpportunityPauseMs(patience: AIPatience): number {
+  if (patience === "quick") return 900;
+  if (patience === "patient") return 2200;
+  return 1400;
 }
 
 function getStudentPauseMs(patience: AIPatience): number {
@@ -153,6 +173,18 @@ export function SessionProvider({
   const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const inFlightAbortRef = useRef<AbortController | null>(null);
   const studentSpeechStartRef = useRef<number>(0);
+  const s2sWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Voice turn whose audio is still loading; dropped from the transcript if never heard
+  const pendingTtsTurnRef = useRef<{ id: string; started: boolean } | null>(null);
+  // Next panelist's reply, drafted while the current one is still speaking
+  const prefetchRef = useRef<{
+    genId: number;
+    afterTurnId: string;
+    speakerId: string;
+    objective?: string;
+    controller: AbortController;
+    promise: Promise<TranscriptTurn>;
+  } | null>(null);
   const pendingS2STurnRef = useRef<{
     id: string;
     speaker: typeof MODERATOR;
@@ -201,6 +233,7 @@ export function SessionProvider({
   const [report, setReport] = useState<SessionReport | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
 
   const stateRef = useRef(state);
   useEffect(() => {
@@ -221,16 +254,22 @@ export function SessionProvider({
       clearTimeout(activeTimerRef.current);
       activeTimerRef.current = null;
     }
-    if (clockIntervalRef.current) {
-      clearInterval(clockIntervalRef.current);
-      clockIntervalRef.current = null;
-    }
+    // The session clock is owned by its own effect; turn resets must not stop it
     if (inFlightAbortRef.current) {
       inFlightAbortRef.current.abort();
       inFlightAbortRef.current = null;
     }
+    if (s2sWatchdogRef.current) {
+      clearTimeout(s2sWatchdogRef.current);
+      s2sWatchdogRef.current = null;
+    }
+    if (prefetchRef.current) {
+      prefetchRef.current.controller.abort();
+      prefetchRef.current = null;
+    }
     sarvamSpeechProvider.stop();
-    speechToSpeechService.stop();
+    // Interrupt playback but keep the live voice connection open for later turns
+    speechToSpeechService.interruptCurrentSpeaker();
     pcmAudioPlayer.stop(false);
   }, []);
 
@@ -507,6 +546,62 @@ export function SessionProvider({
     [],
   );
 
+  /**
+   * While a panelist speaks, draft the following reply from the discussion as it will
+   * stand once they finish. Used only if the same speaker and goal are still chosen.
+   */
+  const prefetchFollowingTurn = useCallback(
+    (genId: number, spokenTurn: TranscriptTurn, objective?: TurnObjective) => {
+      const base = stateRef.current;
+      if (base.interactionMode !== "voice" || generationRef.current !== genId) return;
+
+      const transcript = [
+        ...base.transcript.filter((t) => t.id !== spokenTurn.id),
+        {
+          ...spokenTurn,
+          deliveryState: "complete" as const,
+          deliveryStatus: "fully_delivered" as const,
+          deliveredText: spokenTurn.text,
+        },
+      ];
+      const phase = resolveNextPhase(base.phase, spokenTurn.speakerRole, objective);
+      if (phase === "completed") return;
+      // The next step would be a pause for the candidate, not another panelist
+      if (shouldOfferStudentOpportunity(base.consecutiveAiTurns, phase)) return;
+
+      let decision;
+      try {
+        decision = selectNextSpeaker({
+          participants: base.participants,
+          transcript,
+          phase,
+          consecutiveAiTurns: base.consecutiveAiTurns,
+          remainingSeconds: Math.max(0, base.totalDurationSeconds - base.elapsedSeconds),
+        });
+      } catch {
+        return;
+      }
+
+      const controller = new AbortController();
+      const promise = generateTurn(
+        decision.speaker,
+        decision.objective,
+        { ...base, transcript, phase },
+        controller.signal,
+      );
+      promise.catch(() => {}); // Failures fall back to a fresh request
+      prefetchRef.current = {
+        genId,
+        afterTurnId: spokenTurn.id,
+        speakerId: decision.speaker.id,
+        objective: decision.objective,
+        controller,
+        promise,
+      };
+    },
+    [generateTurn],
+  );
+
   const scheduleNextTurnRef = useRef<(genId: number, delayMs: number) => void>(
     () => {},
   );
@@ -516,6 +611,7 @@ export function SessionProvider({
       genId: number,
       patience: AIPatience,
       scheduleCallback: (g: number, d: number) => void,
+      isVoice: boolean,
     ) => {
       setState((prev) => ({
         ...prev,
@@ -526,7 +622,9 @@ export function SessionProvider({
         generatingSpeakerId: null,
       }));
 
-      const oppPause = getStudentOpportunityPauseMs(patience);
+      const oppPause = isVoice
+        ? getVoiceOpportunityPauseMs(patience)
+        : getStudentOpportunityPauseMs(patience);
       activeTimerRef.current = setTimeout(() => {
         if (generationRef.current !== genId) return;
         setState((prev) => ({
@@ -534,7 +632,7 @@ export function SessionProvider({
           awaitingStudentOpportunity: false,
           consecutiveAiTurns: 0,
         }));
-        scheduleCallback(genId, 1000);
+        scheduleCallback(genId, isVoice ? 250 : 1000);
       }, oppPause);
     },
     [],
@@ -597,6 +695,37 @@ export function SessionProvider({
     [],
   );
 
+  /** Ids of panel turns that were generated but never actually heard. */
+  const takeUnheardTurnIds = useCallback((): string[] => {
+    const pending = pendingTtsTurnRef.current;
+    pendingTtsTurnRef.current = null;
+    return pending && !pending.started ? [pending.id] : [];
+  }, []);
+
+  // Drop a live-voice turn that never started speaking and let the fallback voices take it
+  const abandonPendingS2STurn = useCallback(() => {
+    if (s2sWatchdogRef.current) {
+      clearTimeout(s2sWatchdogRef.current);
+      s2sWatchdogRef.current = null;
+    }
+    const pending = pendingS2STurnRef.current;
+    if (!pending) return;
+    pendingS2STurnRef.current = null;
+    speechToSpeechService.abandonPendingTurn();
+    setState((prev) => ({
+      ...prev,
+      isGenerating: false,
+      generatingSpeakerId: null,
+      activeSpeakerId: null,
+      voiceFlowState: "listening",
+      liveCaption: "",
+      transcript: prev.transcript.filter((t) => t.id !== pending.id),
+    }));
+    if (generationRef.current === pending.genId) {
+      scheduleNextTurnRef.current(pending.genId, 300);
+    }
+  }, []);
+
   // Primary turn execution logic
   const executeNextTurn = useCallback(
     async (genId: number, scheduleCallback: (g: number, d: number) => void) => {
@@ -606,7 +735,9 @@ export function SessionProvider({
         current.phase === "setup" ||
         current.phase === "completed" ||
         current.errorState !== null ||
-        current.voiceFlowState === "student_speaking"
+        current.voiceFlowState === "student_speaking" ||
+        // Mic on = the candidate holds the floor; the panel waits
+        (current.interactionMode === "voice" && !current.isMicMuted)
       ) {
         return;
       }
@@ -623,6 +754,7 @@ export function SessionProvider({
           genId,
           current.config.patience,
           scheduleCallback,
+          current.interactionMode === "voice",
         );
         return;
       }
@@ -653,6 +785,7 @@ export function SessionProvider({
       // =======================================================================
       const isVoiceMode = current.interactionMode === "voice";
       const isS2SActive =
+        LIVE_S2S_ENABLED &&
         isVoiceMode &&
         current.engineMode === "ai" &&
         speechToSpeechService.getIsConnected();
@@ -694,6 +827,7 @@ export function SessionProvider({
               source: "model",
               deliveryState: "in-progress",
               deliveryStatus: "unplayed",
+              phase: prev.phase,
             },
           ],
         }));
@@ -711,6 +845,17 @@ ${recentRemarks || "None yet; this is the opening of the discussion."}
 Deliver a concise, punchy 1-2 sentence response directly addressing recent remarks. Speak immediately.`;
 
         speechToSpeechService.triggerAiTurn(nextSpeaker, instruction);
+
+        // If no audio arrives in time, stop using the live model and replay this turn on fallback voices
+        if (s2sWatchdogRef.current) clearTimeout(s2sWatchdogRef.current);
+        s2sWatchdogRef.current = setTimeout(() => {
+          s2sWatchdogRef.current = null;
+          if (pendingS2STurnRef.current?.id !== pendingTurnId) return;
+          if (stateRef.current.activeSpeakerId === nextSpeaker.id) return;
+          speechToSpeechService.markUnavailable("No audio from live voice model");
+          setVoiceNotice(FALLBACK_VOICE_NOTICE);
+          abandonPendingS2STurn();
+        }, S2S_FIRST_AUDIO_TIMEOUT_MS);
         return;
       }
 
@@ -730,18 +875,34 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         ],
       }));
 
+      // Reuse the reply drafted during the previous turn when it still fits
+      const prefetched = prefetchRef.current;
+      prefetchRef.current = null;
+      const lastTurn = current.transcript[current.transcript.length - 1];
+      const canUsePrefetch =
+        prefetched !== null &&
+        prefetched.genId === genId &&
+        prefetched.speakerId === nextSpeaker.id &&
+        prefetched.objective === decision.objective &&
+        lastTurn?.id === prefetched.afterTurnId;
+      if (prefetched && !canUsePrefetch) prefetched.controller.abort();
+
       // Setup AbortController for in-flight request
-      const abortController = new AbortController();
+      const abortController = canUsePrefetch ? prefetched.controller : new AbortController();
       inFlightAbortRef.current = abortController;
 
       let generatedTurn: TranscriptTurn;
       try {
-        generatedTurn = await generateTurn(
-          nextSpeaker,
-          decision.objective,
-          current,
-          abortController.signal,
-        );
+        generatedTurn = canUsePrefetch
+          ? await prefetched.promise.catch(() =>
+              generateTurn(nextSpeaker, decision.objective, current, abortController.signal),
+            )
+          : await generateTurn(
+              nextSpeaker,
+              decision.objective,
+              current,
+              abortController.signal,
+            );
       } catch (err: unknown) {
         if (abortController.signal.aborted || generationRef.current !== genId) {
           // Request was intentionally cancelled (e.g., student spoke or paused)
@@ -754,13 +915,13 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
 
       if (generationRef.current !== genId) return;
 
-      // Mark generation complete
+      // Mark generation complete. In voice mode the speaker only "speaks" once audio starts.
       setState((prev) => ({
         ...prev,
-        isGenerating: false,
-        generatingSpeakerId: null,
-        activeSpeakerId: nextSpeaker.id,
-        voiceFlowState: "ai_speaking",
+        isGenerating: isVoiceMode,
+        generatingSpeakerId: isVoiceMode ? nextSpeaker.id : null,
+        activeSpeakerId: isVoiceMode ? null : nextSpeaker.id,
+        voiceFlowState: isVoiceMode ? "thinking" : "ai_speaking",
         consecutiveAiTurns:
           nextSpeaker.role === "ai_participant"
             ? prev.consecutiveAiTurns + 1
@@ -778,6 +939,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         // Initial in-progress turn appended to transcript
         const pendingTurnId = generatedTurn.id;
         const speechStartTime = Date.now();
+        pendingTtsTurnRef.current = { id: pendingTurnId, started: false };
 
         setState((prev) => ({
           ...prev,
@@ -788,6 +950,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
               relativeTimestampMs: prev.elapsedSeconds * 1000,
               deliveryState: "in-progress",
               deliveryStatus: "unplayed",
+              phase: prev.phase,
             },
           ],
         }));
@@ -815,16 +978,27 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
             voiceId,
             languageCode,
             pace,
+            pitch: nextSpeaker.voice?.pitch,
             abortSignal: abortController.signal,
+            onUpstreamUnavailable: () => setVoiceNotice(FALLBACK_VOICE_NOTICE),
             onAudioBlocked: () => {
               setState((prev) => ({ ...prev, isAudioBlocked: true }));
             },
             onStart: () => {
               if (generationRef.current !== genId) return;
+              if (pendingTtsTurnRef.current?.id === pendingTurnId) {
+                pendingTtsTurnRef.current.started = true;
+              }
+              // Think ahead: draft the next reply while this one is being heard
+              prefetchFollowingTurn(genId, generatedTurn, decision.objective);
               setState((prev) => ({
                 ...prev,
+                isGenerating: false,
+                generatingSpeakerId: null,
                 activeSpeakerId: nextSpeaker.id,
                 voiceFlowState: "ai_speaking",
+                // Someone on the panel is talking: the candidate's mic stays off
+                isMicMuted: prev.interactionMode === "voice" ? true : prev.isMicMuted,
                 events: [
                   ...prev.events,
                   createSessionEvent("tts_playback_start", {
@@ -835,6 +1009,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
             },
             onEnd: () => {
               if (generationRef.current !== genId) return;
+              if (pendingTtsTurnRef.current?.id === pendingTurnId) pendingTtsTurnRef.current = null;
               const durationMs = Date.now() - speechStartTime;
 
               setState((prev) => {
@@ -878,7 +1053,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
               // If moderator just finished opening, provide dedicated student opportunity window
               const isModTurn = nextSpeaker.role === "moderator";
               const pauseBetween = isModTurn
-                ? getStudentOpportunityPauseMs(current.config.patience)
+                ? getVoiceOpportunityPauseMs(current.config.patience)
                 : getTurnPauseMs(current.config.patience);
 
               if (isModTurn) {
@@ -922,9 +1097,12 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
             },
             onError: (err) => {
               console.warn("[TTS Playback Warning]:", err.message);
+              if (pendingTtsTurnRef.current?.id === pendingTurnId) pendingTtsTurnRef.current = null;
               // Complete turn gracefully
               setState((prev) => ({
                 ...prev,
+                isGenerating: false,
+                generatingSpeakerId: null,
                 activeSpeakerId: null,
                 voiceFlowState: "listening",
               }));
@@ -961,6 +1139,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
                   deliveryState: "complete",
                   deliveryStatus: "fully_delivered",
                   deliveredText: generatedTurn.text,
+                  phase: prev.phase,
                 },
               ],
               events: [
@@ -989,7 +1168,13 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         }, readingDurationMs);
       }
     },
-    [generateTurn, handleGenerationError, triggerStudentOpportunityWindow],
+    [
+      generateTurn,
+      handleGenerationError,
+      triggerStudentOpportunityWindow,
+      abandonPendingS2STurn,
+      prefetchFollowingTurn,
+    ],
   );
 
   // Main turn scheduler with clean cancellation
@@ -1040,7 +1225,8 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
     if (
       state.activeSpeakerId ||
       state.isGenerating ||
-      state.voiceFlowState === "student_speaking"
+      state.voiceFlowState === "student_speaking" ||
+      (state.interactionMode === "voice" && !state.isMicMuted)
     ) {
       return;
     }
@@ -1059,6 +1245,8 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
     state.isGenerating,
     state.voiceFlowState,
     state.errorState,
+    state.interactionMode,
+    state.isMicMuted,
     scheduleNextTurn,
   ]);
 
@@ -1074,8 +1262,10 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       const genId = bumpGeneration();
       sarvamSpeechProvider.stop();
       speechToSpeechService.interruptCurrentSpeaker();
-      speechToSpeechService.sendStudentText(trimmed);
       pcmAudioPlayer.stop(true);
+      const unstartedS2STurn = pendingS2STurnRef.current;
+      pendingS2STurnRef.current = null;
+      const unheardIds = takeUnheardTurnIds();
       if (inFlightAbortRef.current) {
         inFlightAbortRef.current.abort();
       }
@@ -1091,6 +1281,8 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         relativeTimestampMs: current.elapsedSeconds * 1000,
         source: "student",
         deliveryState: "complete",
+        // Tag the phase so closing-round contributions are credited in the report
+        phase: current.phase === "opening" ? "discussion" : current.phase,
       };
 
       const isClosingTurn = current.phase === "closing";
@@ -1105,8 +1297,17 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         isGenerating: false,
         generatingSpeakerId: null,
         errorState: null,
-        transcript: [...prev.transcript, newTurn],
+        transcript: [
+          ...prev.transcript.filter(
+            (t) =>
+              !unheardIds.includes(t.id) &&
+              !(unstartedS2STurn && t.id === unstartedS2STurn.id && !t.text),
+          ),
+          newTurn,
+        ],
         generationId: genId,
+        // Point made: mic goes off so the panel can respond
+        isMicMuted: prev.interactionMode === "voice" ? true : prev.isMicMuted,
         studentHasSpokenInClosing: isClosingTurn
           ? true
           : prev.studentHasSpokenInClosing,
@@ -1136,7 +1337,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         scheduleNextTurn(genId, 50);
       }, pauseBetween);
     },
-    [bumpGeneration, scheduleNextTurn],
+    [bumpGeneration, scheduleNextTurn, takeUnheardTurnIds],
   );
 
   // Manual interrupt / Take Floor action
@@ -1148,16 +1349,34 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
     if (inFlightAbortRef.current) {
       inFlightAbortRef.current.abort();
     }
+    const unstartedS2STurn = pendingS2STurnRef.current;
+    pendingS2STurnRef.current = null;
+    const unheardIds = takeUnheardTurnIds();
+    const isVoice = stateRef.current.interactionMode === "voice";
+
     setState((prev) => ({
       ...prev,
       phase: prev.phase === "opening" ? "discussion" : prev.phase,
       activeSpeakerId: STUDENT_PARTICIPANT.id,
       voiceFlowState: "student_speaking",
+      isGenerating: false,
+      generatingSpeakerId: null,
+      awaitingStudentOpportunity: false,
+      // Interrupting in voice mode opens the candidate's mic
+      isMicMuted: isVoice ? false : prev.isMicMuted,
+      transcript: prev.transcript.filter(
+        (t) =>
+          !unheardIds.includes(t.id) &&
+          !(unstartedS2STurn && t.id === unstartedS2STurn.id && !t.text),
+      ),
       events: [
         ...prev.events,
         createSessionEvent("tts_interrupted", { manual: true }),
       ],
     }));
+
+    // Voice mode: the floor stays with the candidate until they finish or turn the mic off
+    if (isVoice) return;
 
     // Safety timeout: If user clicks interrupt but doesn't speak within 7s, return floor to listening
     if (activeTimerRef.current) clearTimeout(activeTimerRef.current);
@@ -1170,90 +1389,51 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       }));
       scheduleNextTurnRef.current(genId, 1200);
     }, 7000);
-  }, [bumpGeneration]);
+  }, [bumpGeneration, takeUnheardTurnIds]);
 
-  // Voice Streaming lifecycle (Speech-to-Speech primary, fallback to STT)
+  const isLivePhase =
+    state.phase === "opening" ||
+    state.phase === "discussion" ||
+    state.phase === "closing";
+
+  // Live voice channel for the panel (opt-in). Independent of the candidate's mic,
+  // so muting or interrupting never tears it down.
   useEffect(() => {
-    const isLivePhase =
-      state.phase === "opening" ||
-      state.phase === "discussion" ||
-      state.phase === "closing";
-
     if (
+      !LIVE_S2S_ENABLED ||
       !isLivePhase ||
       state.isPaused ||
       state.interactionMode !== "voice" ||
-      state.isMicMuted ||
-      state.errorState !== null
+      state.engineMode !== "ai"
     ) {
       speechToSpeechService.stop();
-      speechRecognitionService.stop();
       return;
     }
 
     let isSubscribed = true;
-
-    async function initVoice() {
-      // 1. Try native Speech-to-Speech first (Ultra-low latency Gemini Live model)
-      const s2sConnected = await speechToSpeechService.start(
+    void speechToSpeechService
+      .start(
         {
           topic: state.config.topic,
           language: state.config.language,
-          patience: state.config.patience,
-          initialSpeaker: state.participants.find(
-            (p) => p.role === "moderator",
-          ),
+          initialSpeaker: MODERATOR,
         },
         {
-          onStudentSpeechStart: () => {
-            if (!isSubscribed) return;
-            studentSpeechStartRef.current = Date.now();
-            if (inFlightAbortRef.current) inFlightAbortRef.current.abort();
-
-            setState((prev) => ({
-              ...prev,
-              activeSpeakerId: STUDENT_PARTICIPANT.id,
-              voiceFlowState: "student_speaking",
-              events: [
-                ...prev.events,
-                createSessionEvent("student_speech_start"),
-              ],
-            }));
-          },
-          onStudentTranscriptPartial: (text) => {
-            if (!isSubscribed) return;
-            setState((prev) => ({
-              ...prev,
-              liveCaption: text,
-            }));
-          },
-          onStudentTurnCommitted: (text, durMs) => {
-            if (!isSubscribed) return;
-            const speakingDur = Math.max(800, durMs);
-            setState((prev) => ({
-              ...prev,
-              studentSpeakingDurationMs:
-                prev.studentSpeakingDurationMs + speakingDur,
-              liveCaption: "",
-              events: [
-                ...prev.events,
-                createSessionEvent("student_speech_end", {
-                  durationMs: speakingDur,
-                }),
-              ],
-            }));
-            submitStudentTurn(text);
-          },
           onAiSpeechStart: (speakerId) => {
             if (!isSubscribed) return;
             const currentRef = pendingS2STurnRef.current;
             if (currentRef && generationRef.current === currentRef.genId) {
+              if (s2sWatchdogRef.current) {
+                clearTimeout(s2sWatchdogRef.current);
+                s2sWatchdogRef.current = null;
+              }
               setState((prev) => ({
                 ...prev,
                 isGenerating: false,
                 generatingSpeakerId: null,
                 activeSpeakerId: speakerId,
                 voiceFlowState: "ai_speaking",
+                isMicMuted: true,
                 consecutiveAiTurns:
                   currentRef.speaker.role === "ai_participant"
                     ? prev.consecutiveAiTurns + 1
@@ -1336,7 +1516,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
 
             const isModTurn = speaker.role === "moderator";
             const pauseBetween = isModTurn
-              ? getStudentOpportunityPauseMs(stateRef.current.config.patience)
+              ? getVoiceOpportunityPauseMs(stateRef.current.config.patience)
               : getTurnPauseMs(stateRef.current.config.patience);
 
             if (isModTurn) {
@@ -1382,91 +1562,115 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
               }));
             }
           },
-          onError: (err) => {
-            console.warn("[S2S Service Notice]:", err.message);
+          onUnavailable: () => {
+            if (!isSubscribed) return;
+            setVoiceNotice(FALLBACK_VOICE_NOTICE);
+            abandonPendingS2STurn();
           },
         },
-      );
-
-      // 2. If S2S is not available, fallback to legacy STT service
-      if (!s2sConnected) {
-        await speechRecognitionService.start(
-          {
-            onSpeechStart: () => {
-              if (!isSubscribed) return;
-              studentSpeechStartRef.current = Date.now();
-              if (!audioPlaybackService.getIsPlaying()) {
-                if (inFlightAbortRef.current) inFlightAbortRef.current.abort();
-                setState((prev) => ({
-                  ...prev,
-                  activeSpeakerId: STUDENT_PARTICIPANT.id,
-                  voiceFlowState: "student_speaking",
-                  events: [
-                    ...prev.events,
-                    createSessionEvent("student_speech_start"),
-                  ],
-                }));
-              }
-            },
-            onPartialTranscript: (text) => {
-              if (!isSubscribed || audioPlaybackService.getIsPlaying()) return;
-              setState((prev) => ({ ...prev, liveCaption: text }));
-            },
-            onTurnCommitted: (text) => {
-              if (!isSubscribed) return;
-              const trimmed = text.trim();
-              if (!trimmed || trimmed.length < 3) {
-                setState((prev) => ({ ...prev, liveCaption: "" }));
-                return;
-              }
-              const speakingDur = Math.max(
-                800,
-                Date.now() - studentSpeechStartRef.current,
-              );
-              setState((prev) => ({
-                ...prev,
-                studentSpeakingDurationMs:
-                  prev.studentSpeakingDurationMs + speakingDur,
-                liveCaption: "",
-                events: [
-                  ...prev.events,
-                  createSessionEvent("student_speech_end", {
-                    durationMs: speakingDur,
-                  }),
-                ],
-              }));
-              submitStudentTurn(trimmed);
-            },
-            onError: (err) => {
-              console.warn("[STT Service Notice]:", err.message);
-            },
-          },
-          {
-            patience: state.config.patience,
-            language: state.config.language,
-            preferGateway: true,
-          },
-        );
-      }
-    }
-
-    void initVoice();
+      )
+      .then((ok) => {
+        if (isSubscribed && !ok) setVoiceNotice(FALLBACK_VOICE_NOTICE);
+      });
 
     return () => {
       isSubscribed = false;
       speechToSpeechService.stop();
+    };
+  }, [
+    isLivePhase,
+    state.isPaused,
+    state.interactionMode,
+    state.engineMode,
+    state.config.topic,
+    state.config.language,
+    abandonPendingS2STurn,
+  ]);
+
+  // Candidate microphone: listens only while the mic is switched on (push to talk)
+  useEffect(() => {
+    if (
+      !isLivePhase ||
+      state.isPaused ||
+      state.interactionMode !== "voice" ||
+      state.isMicMuted ||
+      state.errorState !== null
+    ) {
+      speechRecognitionService.stop();
+      return;
+    }
+
+    let isSubscribed = true;
+    void speechRecognitionService.start(
+      {
+        onSpeechStart: () => {
+          if (!isSubscribed) return;
+          studentSpeechStartRef.current = Date.now();
+          if (!audioPlaybackService.getIsPlaying()) {
+            if (inFlightAbortRef.current) inFlightAbortRef.current.abort();
+            setState((prev) => ({
+              ...prev,
+              activeSpeakerId: STUDENT_PARTICIPANT.id,
+              voiceFlowState: "student_speaking",
+              events: [
+                ...prev.events,
+                createSessionEvent("student_speech_start"),
+              ],
+            }));
+          }
+        },
+        onPartialTranscript: (text) => {
+          if (!isSubscribed || audioPlaybackService.getIsPlaying()) return;
+          setState((prev) => ({ ...prev, liveCaption: text }));
+        },
+        onTurnCommitted: (text) => {
+          if (!isSubscribed) return;
+          const trimmed = text.trim();
+          if (!trimmed || trimmed.length < 3) {
+            setState((prev) => ({ ...prev, liveCaption: "" }));
+            return;
+          }
+          const speakingDur = Math.max(
+            800,
+            Date.now() - studentSpeechStartRef.current,
+          );
+          setState((prev) => ({
+            ...prev,
+            studentSpeakingDurationMs:
+              prev.studentSpeakingDurationMs + speakingDur,
+            liveCaption: "",
+            events: [
+              ...prev.events,
+              createSessionEvent("student_speech_end", {
+                durationMs: speakingDur,
+              }),
+            ],
+          }));
+          submitStudentTurn(trimmed);
+        },
+        onError: (err) => {
+          console.warn("[STT Service Notice]:", err.message);
+        },
+      },
+      {
+        patience: state.config.patience,
+        language: state.config.language,
+        preferGateway: true,
+      },
+    );
+
+    return () => {
+      isSubscribed = false;
       speechRecognitionService.stop();
     };
   }, [
-    state.phase,
+    isLivePhase,
     state.isPaused,
     state.interactionMode,
     state.isMicMuted,
+    state.errorState,
     state.config.patience,
     state.config.language,
-    state.config.topic,
-    state.participants,
-    state.errorState,
     submitStudentTurn,
   ]);
 
@@ -1519,8 +1723,10 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         studentSpeakingDurationMs: 0,
         aiSpeakingDurationMs: 0,
         isAudioBlocked: false,
-        isMicMuted: false,
+        // Voice mode starts with the mic off; the candidate turns it on to speak
+        isMicMuted: (config.mode || "voice") === "voice",
       });
+      setVoiceNotice(null);
 
       // Schedule opening turn immediately to eliminate awkward startup wait
       scheduleNextTurnRef.current(genId, 200);
@@ -1530,6 +1736,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
 
   const pauseSession = useCallback(() => {
     bumpGeneration();
+    const unheardIds = takeUnheardTurnIds();
     speechRecognitionService.stop();
     sarvamSpeechProvider.stop();
     speechToSpeechService.stop();
@@ -1540,11 +1747,13 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       isPaused: true,
       activeSpeakerId: null,
       voiceFlowState: "paused",
+      isMicMuted: prev.interactionMode === "voice" ? true : prev.isMicMuted,
       isGenerating: false,
       generatingSpeakerId: null,
+      transcript: prev.transcript.filter((t) => !unheardIds.includes(t.id)),
       events: [...prev.events, createSessionEvent("session_paused")],
     }));
-  }, [bumpGeneration]);
+  }, [bumpGeneration, takeUnheardTurnIds]);
 
   const resumeSession = useCallback(() => {
     const genId = bumpGeneration();
@@ -1631,6 +1840,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
   const jumpToClosing = useCallback(() => {
     const genId = bumpGeneration();
     sarvamSpeechProvider.stop();
+    const unheardIds = takeUnheardTurnIds();
 
     setState((prev) => ({
       ...prev,
@@ -1640,6 +1850,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       isGenerating: false,
       generatingSpeakerId: null,
       generationId: genId,
+      transcript: prev.transcript.filter((t) => !unheardIds.includes(t.id)),
       elapsedSeconds: Math.max(
         prev.elapsedSeconds,
         prev.totalDurationSeconds - 40,
@@ -1649,7 +1860,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         createSessionEvent("phase_changed", { phase: "closing" }),
       ],
     }));
-  }, [bumpGeneration]);
+  }, [bumpGeneration, takeUnheardTurnIds]);
 
   const skipStudentClosing = useCallback(() => {
     const current = stateRef.current;
@@ -1702,12 +1913,33 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
     }));
   }, []);
 
-  const setMicMuted = useCallback((muted: boolean) => {
-    setState((prev) => ({
-      ...prev,
-      isMicMuted: muted,
-    }));
-  }, []);
+  const setMicMuted = useCallback(
+    (muted: boolean) => {
+      if (!muted) {
+        if (stateRef.current.interactionMode === "voice") {
+          // Turning the mic on silences whoever is speaking and gives the candidate the floor
+          interruptCurrentSpeaker();
+        } else {
+          setState((prev) => ({ ...prev, isMicMuted: false }));
+        }
+        return;
+      }
+
+      // Turning the mic off sends whatever was said; submitStudentTurn mutes and hands over
+      if (speechRecognitionService.forceCommit()) return;
+
+      // Nothing said: release the floor so the panel continues
+      setState((prev) => ({
+        ...prev,
+        isMicMuted: true,
+        liveCaption: "",
+        ...(prev.activeSpeakerId === STUDENT_PARTICIPANT.id
+          ? { activeSpeakerId: null, voiceFlowState: "listening" as const }
+          : {}),
+      }));
+    },
+    [interruptCurrentSpeaker],
+  );
 
   const setInteractionMode = useCallback((mode: InteractionMode) => {
     setState((prev) => ({
@@ -1826,6 +2058,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       reportError,
       isReportStale,
       generateReport,
+      voiceNotice,
     }),
     [
       state,
@@ -1851,6 +2084,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       reportError,
       isReportStale,
       generateReport,
+      voiceNotice,
     ],
   );
 

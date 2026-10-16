@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'LLM returned an empty response. You can retry or switch to demo mode.',
+          error: 'The panelist could not respond this time. You can retry or switch to demo mode.',
           retryable: true
         },
         { status: 502 }
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Model generated empty turn text. Please retry.',
+          error: 'The panelist could not respond this time. Please retry.',
           retryable: true
         },
         { status: 502 }
@@ -234,8 +234,8 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error: isQuotaOrRateLimit
-          ? 'LLM API rate limit or quota exceeded. You can retry in a moment or switch to demo mode.'
-          : 'Failed to generate discussion turn: ' + errorMessage.slice(0, 150),
+          ? 'The AI panel is busy right now. You can retry in a moment or switch to demo mode.'
+          : 'The next discussion turn could not be generated. You can retry or switch to demo mode.',
         retryable: true
       },
       { status: 500 }

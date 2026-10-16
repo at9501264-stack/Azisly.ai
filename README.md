@@ -1,361 +1,301 @@
 <div align="center">
 
-# 🎙️ GD Arena — Voice-First AI Group Discussion Simulation Platform
+# GD Arena
 
-**Next-Generation Autonomous Group Discussion Simulator for Campus Placements & Executive Interviews**
+**Rehearse the group discussion before the real one.**
 
-[![Live Demo on Vercel](https://img.shields.io/badge/Live%20Demo-Vercel%20Production-10b981?style=for-the-badge&logo=vercel&logoColor=white)](https://gdarena-liard.vercel.app)
-[![Next.js 16](https://img.shields.io/badge/Next.js-16.4.0-000000?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![React 19](https://img.shields.io/badge/React-19.0-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
-[![Groq Ultra-Fast LLM](https://img.shields.io/badge/LLM%20Primary-Groq%20Qwen%2027B-f97316?style=for-the-badge&logo=fastapi&logoColor=white)](https://groq.com/)
-[![Google Gemini Fallback](https://img.shields.io/badge/LLM%20Fallback-Gemini%202.5%20%2F%203.5-4285f4?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com/)
-[![Sarvam AI](https://img.shields.io/badge/Audio%20AI-Sarvam%20Bulbul%20%2B%20Saaras-6366f1?style=for-the-badge)](https://www.sarvam.ai/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+A voice-first practice room for campus-placement group discussions. Sit at a table with an AI moderator and up to five AI peers who argue, interrupt and listen, then get coaching that quotes your own words.
 
-<p align="center">
-  <b>Practice authentic campus-placement group discussions with autonomous AI candidates and an academic moderator in real-time spoken Hindi-English (Hinglish) & English.</b><br/>
-  Features sub-300ms conversational turnaround, native Web Audio buffer streaming, instant Spacebar barge-in interruptions, and a verifiable competency scorecard with zero-hallucinated quotes.
-</p>
+[![Next.js 16](https://img.shields.io/badge/Next.js-16.4-111?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![React 19](https://img.shields.io/badge/React-19-1e3a2f?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS 4](https://img.shields.io/badge/Tailwind-4-38bdf8?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Groq](https://img.shields.io/badge/Replies-Groq-f55036?style=flat-square)](https://groq.com/)
+[![Gnani Vachana](https://img.shields.io/badge/Voices-Gnani%20Vachana-e3a13b?style=flat-square)](https://www.gnani.ai/)
+[![Gemini](https://img.shields.io/badge/Coaching-Gemini-4285f4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/)
 
-[**🚀 Explore Live Production Arena**](https://gdarena-liard.vercel.app) • [**🎥 Watch Demo Walkthrough**](#-animated-session-walkthrough) • [**🧠 AI Models Deep Dive**](#-ai-models--architecture-breakdown) • [**🏛️ System Architecture**](#-system-architecture--technical-deep-dive) • [**🛠️ Local Setup**](#-quick-start--local-development)
+[Live demo](https://gdarena-liard.vercel.app) · [How a round works](#how-a-round-works) · [Architecture](#architecture) · [Run it locally](#getting-started)
 
----
+<img src="docs/assets/landing_hero.png" alt="GD Arena landing page: 'Rehearse the group discussion before the real one' with the panel listed beside it" width="100%" />
 
 </div>
 
-## 🌟 Visual Tour & Interactive Interface
+---
 
-Experience the authentic campus placement discussion room from configuration to qualitative post-session coaching.
+## Why GD Arena
 
-### 🎥 Full HD Walkthrough Video (74s Spoken Audio + Complete Feature Tour)
+Group discussions are the round most candidates never get to rehearse: you need five other people, a moderator and someone to tell you honestly how you did. GD Arena gives you all three on demand.
 
-<div align="center">
-
-https://github.com/user-attachments/assets/demo_walkthrough.mp4
-
-<video src="https://raw.githubusercontent.com/at9501264-stack/Azisly.ai/main/docs/assets/demo_walkthrough.mp4" controls width="100%" poster="docs/assets/discussion_arena.png">
-  <a href="https://raw.githubusercontent.com/at9501264-stack/Azisly.ai/main/docs/assets/demo_walkthrough.mp4">▶️ Watch 74s Full Walkthrough Video with Spoken Voices (1080p MP4)</a>
-</video>
-
-<p align="center">
-  <b><a href="https://raw.githubusercontent.com/at9501264-stack/Azisly.ai/main/docs/assets/demo_walkthrough.mp4">▶️ Click Here to Stream / Download 74s Master Walkthrough Video with Spoken Audio (1080p MP4)</a></b><br/>
-  <i>Includes 23s feature tour (topics, panel, preflight VU meter) + 40s live spoken debate (Prof. Sharma, candidate speech, Aarav counter, Meera synthesis) + 10s evaluation report.</i>
-</p>
-
-</div>
-
-#### 🎞️ Instant Quick-Preview Animation
-![GD Arena Live Demo Animation](docs/assets/demo_video.webp)
+- **A real table, not a chatbot.** A moderator opens, peers with distinct personalities debate, and you choose when to take the floor.
+- **Human-sounding Indian voices.** Every panelist has their own voice, in English or natural Hinglish, streamed so they start speaking about a second after deciding what to say.
+- **You control the mic.** Your mic stays off while anyone else talks. Tap it (or press <kbd>Space</kbd>) to interrupt and speak, tap again when you're done.
+- **Coaching you can trust.** Six GD skills, each rated from what you actually said. Every quote is verified word-for-word against the transcript before it reaches you.
+- **Never stuck.** If a voice or AI service is down, the room falls back automatically: to backup voices, browser voices, or a scripted demo panel.
 
 ---
 
-### 1. Pre-Flight Room Configuration & Hardware Check
-> Configure discussion duration, topic archetype, language mode (Collegiate Hinglish vs Formal English), and verify microphone input sensitivity with hardware VU metering.
+## A tour of the product
 
-| Room Setup & Topic Selection | Audio Hardware Preflight Modal |
-|:---:|:---:|
-| ![Room Setup Screen](docs/assets/room_setup.png) | ![Audio Preflight Modal](docs/assets/audio_preflight.png) |
-| *Curated placement topics, panel scaling (3-5 peers), and AI patience tuning.* | *Live VU audio analyzer, mic gain control, and browser audio unblocker.* |
+### 1. Set up your room
+Pick a curated placement topic or write your own, then choose voice or text, panel size (3–5 peers), language, length and how quickly the panel jumps in. The summary card updates as you choose.
 
----
+<img src="docs/assets/room_setup.png" alt="Room setup with topic list, practice mode and a 'Your room' summary card" width="100%" />
 
-### 2. Live Spoken Discussion Arena
-> Engage in a multi-turn discussion where Professor Sharma opens the floor, AI peers argue distinct perspectives, and your speech is transcribed live with instant barge-in capabilities.
+### 2. Check your mic
+A quick check with a live input meter, a test tone, and a privacy note before you enter.
 
-![Discussion Arena Live Screen](docs/assets/discussion_arena.png)
+<img src="docs/assets/audio_preflight.png" alt="Mic and speaker check dialog with a live level meter" width="100%" />
 
----
+### 3. Discuss at the table
+Prof. Sharma sits at the head of the table with the topic in front of him; peers sit on either side and you sit at the front with your mic. Each panelist is an illustrated face that blinks, turns to look at whoever is talking, and moves their lips with the loudness of their real voice. Live subtitles, the transcript and a context-aware coaching tip run alongside.
 
-### 3. Post-Session Verifiable Coaching Scorecard
-> Evidence-grounded performance evaluation across 6 placement competencies with clickable quote verification and tactical differentiator coaching.
+<img src="docs/assets/discussion_arena.png" alt="Discussion room: moderator and peers around a table, Aarav speaking, live subtitles and transcript" width="100%" />
 
-![Evaluation Scorecard](docs/assets/evaluation_report.png)
+### 4. Read your report
+A plain-language verdict, your key numbers, who held the floor, a timeline of when everyone spoke, six evidence-backed skill ratings, a "what you could have said" moment and a three-step plan for your next round.
 
----
+<img src="docs/assets/evaluation_report.png" alt="Report: headline verdict, skill snapshot, key numbers and speaking-share chart" width="100%" />
 
-## 🧠 AI Models & Architecture Breakdown
-
-GD Arena combines best-in-class specialized models across LLM inference, acoustic speech synthesis, and real-time streaming speech-to-text to deliver conversational turn-taking with zero dead-air.
-
-| Component | Provider / Technology | Model Identifier | Primary Responsibility & Role | Why This Model Was Chosen |
-|---|---|---|---|---|
-| **Primary Conversational LLM** | **Groq Cloud** | `qwen/qwen3.8-27b` | Turn-by-turn conversational debate responses in structured JSON format. | **Blazing speed (~250ms–310ms latency)**. Group discussions feel artificial if debaters pause for 6-10 seconds. Qwen 27B on Groq LPU delivers instantaneous replies with sharp logical counter-arguments. |
-| **Failover Conversational LLM** | **Google Gemini** | `gemini-3.5-flash-lite` / `gemini-2.5-flash` | Automatic failover when Groq hits rate limits or network hiccups. | High resilience, reliable multi-turn schema adherence, and zero downtime assurance. |
-| **Qualitative Report & Coach** | **Google Gemini** | `gemini-2.5-flash` | Post-session analysis across 6 placement GD dimensions and deterministic quote citations. | Deep contextual reasoning over full session history (1000+ tokens) with evidence quote citation capabilities. |
-| **Indian Spoken Voice (TTS)** | **Sarvam AI** | `bulbul:v3` | High-fidelity neural voice synthesis for Indian English and natural Hinglish code-switching. | Native Indian accents and collegiate tonal cadence matching individual persona archetypes (`ratan`, `aditya`, `ishita`, `kabir`, `kavya`, `dev`). |
-| **Realtime Speech-to-Text (STT)** | **Sarvam AI** | `saaras:v4` via WebSocket | Continuous real-time transcription of candidate speech streamed as 16kHz Linear16 PCM. | State-of-the-art accuracy for Indian names, technical collegiate terminology, and mixed Hindi-English phrasing. |
-| **Audio Playback Engine** | **Web Audio API** | Native Browser AudioContext | Decodes raw MP3 buffers into memory and routes audio to hardware output. | Completely eliminates browser autoplay blocks and enables instant (<10ms) Spacebar barge-in interruptions. |
-| **Offline Fallback Engine** | **Deterministic Scripted Engine** | Built-in TypeScript State Machine | Fallback dialogue and browser `webkitSpeechRecognition` / `SpeechSynthesis`. | Guarantees the application **never crashes or blocks the user** even if API keys are absent or offline. |
+<img src="docs/assets/evaluation_skills.png" alt="Skill cards with ratings, observations, practice tips and verified quotes" width="100%" />
 
 ---
 
-## 🏛️ System Architecture & Technical Deep Dive
+## How a round works
 
-GD Arena is built on an event-driven, decoupled architecture designed for sub-second conversational latency and acoustic reliability.
-
-```mermaid
-flowchart TB
-    subgraph Client["Browser Client (Next.js 16 / React 19)"]
-        UI["Studio Dark UI (#0c0c0e)"]
-        WebAudioEngine["Web Audio API Engine\n(AudioContext & BufferSource)"]
-        VAD["Live Speech Processor\n(ScriptProcessor 16kHz PCM)"]
-        WebSpeechFallback["Web Speech API Fallback\n(SpeechSynthesis / webkitSpeech)"]
-    end
-
-    subgraph Gateway["Local / Cloud Voice Gateway (Port 3001)"]
-        WSGateway["WebSocket Gateway (ws)\nRaw Linear16 PCM Bridge"]
-    end
-
-    subgraph LLMCluster["Conversational Reasoning Cluster"]
-        direction TB
-        Groq["Primary LLM: Groq API\n(qwen/qwen3.8-27b)\n⚡ Latency: ~250ms"]
-        Gemini["Fallback LLM: Google Gemini\n(gemini-2.5-flash / gemini-3.5)\n⚡ Latency: ~1.2s"]
-    end
-
-    subgraph SpeechServices["Sarvam AI Voice Services"]
-        SarvamSTT["Realtime Streaming STT\n(saaras:v4 WebSocket)"]
-        SarvamTTS["Indian Emotional TTS\n(bulbul:v3 REST API)"]
-    end
-
-    %% Audio In
-    VAD -->|Binary PCM Frames| WSGateway
-    WSGateway -->|Raw 16kHz Linear16| SarvamSTT
-    SarvamSTT -->|Partial & Final Transcripts| WSGateway
-    WSGateway -->|Normalized Transcript Events| UI
-
-    %% Turn Execution
-    UI -->|Next Turn Request| Groq
-    Groq -.->|Failover on Error/RateLimit| Gemini
-    Groq -->|Structured JSON Turn| UI
-
-    %% Audio Out
-    UI -->|TTS Generation Request| SarvamTTS
-    SarvamTTS -->|Base64 MP3 Audio| UI
-    UI -->|Decoded AudioBuffer| WebAudioEngine
-    WebAudioEngine -->|Hardware Speaker Playback| UI
-    
-    %% Fallbacks
-    VAD -.->|WS Disconnect| WebSpeechFallback
-    WebAudioEngine -.->|Autoplay Block| WebSpeechFallback
-```
-
----
-
-## 🔄 Multi-Agent Turn Orchestration & Speaking Floor Flow
-
-The discussion engine implements a deterministic state machine to ensure natural group dynamics, preventing speaker collision while preserving the candidate's opportunity to take the floor.
+The room follows the etiquette of a real GD. The moderator opens, peers take turns, and the floor is yours whenever you claim it.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Candidate as 🧑‍🎓 Candidate (You)
-    participant Mod as 👨‍🏫 Prof. Sharma (Moderator)
-    participant Peer1 as ⚡ Aarav (Assertive)
-    participant Peer2 as 📊 Meera (Analytical)
-    participant Engine as ⚙️ Session Engine
-    participant Audio as 🔊 Web Audio Buffer
+    participant You
+    participant Room as Turn engine
+    participant LLM as Replies (Groq → Gemini)
+    participant Voice as Voices (Gnani stream)
 
-    Note over Mod,Engine: Session Starts
-    Engine->>Mod: Trigger Opening Statement
-    Mod->>Audio: Play Opening Speech (~300ms generation)
-    Audio-->>Candidate: Loud & clear audio through speakers
-    Note over Engine: Dedicated Student Opportunity Window (4.0s)
-    
-    alt Candidate Starts Speaking
-        Candidate->>Engine: "Hello everyone, my view on AI is..."
-        Engine->>Engine: Live Transcription Bubble renders (You: Candidate)
-        Candidate->>Engine: VAD Silence Detected (>1.2s silence)
-        Engine->>Engine: Commit Spoken Turn to Transcript
-        Engine->>Peer1: Route Turn (Objective: Challenge Candidate)
-        Peer1->>Audio: Play Counter-Stance (Direct Reaction Directive)
-    else Candidate Waits
-        Engine->>Peer1: Fair Rotation Selects Aarav
-        Peer1->>Audio: Play Initial Argument
-    end
-
-    Note over Peer1,Audio: Peer 1 is speaking aloud
-    opt Spacebar or Click Barge-In
-        Candidate->>Engine: Press [Space] or Click [Interrupt]
-        Engine->>Audio: Immediate Hard Stop (<10ms)
-        Engine->>Candidate: Grant Floor & Start Candidate Turn
-    end
-
-    Engine->>Peer2: Next Turn (Meera builds on debate)
+    Room->>LLM: Moderator opening
+    LLM-->>Room: Text
+    Room->>Voice: Stream audio
+    Voice-->>You: Prof. Sharma speaks (your mic is off)
+    Note over Room,LLM: While someone speaks, the next reply is drafted in the background
+    Room->>Voice: Next peer (reply already prepared)
+    Voice-->>You: Aarav speaks
+    You->>Room: Tap mic / Space: interrupt
+    Room-->>Voice: Stop playback instantly
+    Note over You,Room: The panel waits while your mic is on
+    You->>Room: Your point (speech or typing)
+    Room->>Room: Mic switches off, floor returns
+    Room->>LLM: A peer responds to your point
 ```
 
----
+**Floor rules**
 
-## 🎭 AI Participant Personas & Voice Profiles
-
-Each AI peer is engineered with a strict psychological archetype, debate posture, and tailored voice profile from Sarvam AI's Indian acoustic model:
-
-| Participant | Role | Archetype & Behavior | Voice Profile | Pace & Pitch | Accent / Color |
-|---|---|---|---|---|---|
-| **Prof. Sharma** | Moderator | Impartial, academic, time-conscious. Regulates discussion ground rules, guides transitions, and delivers final summary. | `ratan` | `0.98x` / `0.95` | `Emerald` (`#10b981`) |
-| **Aarav** | Peer Debater | **Assertive & Direct**. Challenges assumptions immediately, emphasizes business reality, drives the conversation forward. | `aditya` | `1.08x` / `1.05` | `Amber` (`#f59e0b`) |
-| **Meera** | Peer Debater | **Analytical & Structured**. Relies on industry statistics, operational frameworks, and systemic trade-offs. | `ishita` | `1.00x` / `1.00` | `Blue` (`#3b82f6`) |
-| **Kabir** | Peer Debater | **Thoughtful & Ethical**. Speaks selectively, raises long-term social, legal, and ethical consequences. | `kabir` | `0.92x` / `0.92` | `Indigo` (`#6366f1`) |
-| **Riya** | Peer Debater | **Creative & Tangential**. Shares relatable real-world anecdotes, consumer perspectives, and startup parallels. | `kavya` | `1.06x` / `1.08` | `Rose` (`#f43f5e`) |
-| **Dev** | Peer Debater | **Diplomatic Synthesizer**. Unifies conflicting opinions, highlights consensus, and proposes balanced solutions. | `dev` | `1.00x` / `0.98` | `Purple` (`#a855f7`) |
-| **You** | Candidate | **Practice Candidate**. Active microphone participant. Live transcription, barge-in privilege, and comprehensive scorecard. | Client Mic / Text | Native | `Teal` (`#14b8a6`) |
+| Situation | What happens |
+|---|---|
+| Anyone on the panel is speaking | Your mic is off, so their voices never leak into your transcript |
+| You tap the mic or press <kbd>Space</kbd> | The speaker stops at once, your mic turns on, "You have the floor" |
+| You finish speaking | After a short silence your point is sent and the mic turns off |
+| You tap the mic again | Whatever you said is sent; if you said nothing, the panel simply continues |
+| You type instead | Works in both modes; the panel answers your typed point |
 
 ---
 
-## ⚡ Core Engineering Highlights
+## Architecture
 
-### 1. Ultra-Low Latency Conversational Turnaround (<1.5s End-to-End)
-- **Primary LLM**: Powered by Groq's `qwen/qwen3.8-27b`, returning structured conversational JSON in **220ms – 310ms** (a 40x speedup over standard 70B/120B reasoning models).
-- **Fallback Resilience**: Automatically falls back to Google's `gemini-3.5-flash-lite` if Groq encounters any rate limit or network partition.
-- **Direct Reaction Directive**: Prompts instruct AI peers to acknowledge the student's exact spoken argument before stating their own position.
+```mermaid
+flowchart LR
+    subgraph Browser["Browser (Next.js 16 · React 19)"]
+        UI["Room UI<br/>faces · subtitles · transcript"]
+        Engine["Turn engine<br/>SessionContext"]
+        Player["Stream player<br/>Web Audio · level meter"]
+        Mic["Push-to-talk mic<br/>speech recognition"]
+    end
 
-### 2. Native Web Audio API Buffer Playback (No Autoplay Freezes)
-- Replaces fragile HTML `<audio>` elements with **Web Audio API `AudioContext` & `AudioBufferSourceNode`**.
-- Audio decoded directly from Sarvam Bulbul:v3 MP3 binary streams into memory buffers.
-- Preflight click permanently unlocks the browser's audio hardware context, ensuring **every AI voice plays loudly and clearly with zero audio clipping or dropped sentences**.
+    subgraph Server["Next.js route handlers"]
+        Turn["/api/discussion/turn"]
+        TTS["/api/speech/tts-stream<br/>/api/speech/tts"]
+        Report["/api/discussion/report"]
+    end
 
-### 3. Dynamic Acoustic Echo Suppression (Eliminates Self-Interruption)
-- Laptop microphones close to laptop speakers inevitably capture the AI debater's voice playing through the room.
-- GD Arena dynamically mutes outgoing microphone streaming while `audioPlaybackService.getIsPlaying()` is true, **preventing the AI's own voice from echoing into the mic and aborting its own sentence**.
-- Full user interruption is preserved via a dedicated **"Interrupt" button** and the **Spacebar hotkey**.
+    Gateway["Voice gateway :3001<br/>WebSocket bridge"]
 
-### 4. Zero-Hallucination Competency Evaluation
-- Analyzes candidate performance across 6 placement GD competencies:
-  1. *Starting the Discussion*
-  2. *Idea Quality & Depth*
-  3. *Building on Others*
-  4. *Active Listening*
-  5. *Handling Disagreements*
-  6. *Ending Strongly*
-- **Algorithmic Quote Verification**: Every positive highlight and critical coaching feedback is mathematically verified against actual transcript turns in domain code. If a quote does not exist in the recorded turns, it is scrubbed before presentation.
-- **Interactive Transcript Illumination**: Clicking on any evidence citation automatically scrolls the transcript pane and illuminates the exact turn in glowing gold.
+    Groq[("Groq")]
+    Gemini[("Gemini")]
+    Gnani[("Gnani Vachana")]
+    Sarvam[("Sarvam")]
 
----
-
-## 📝 Annotated Live Session Dialogue Walkthrough
-
-Below is a representative transcript snippet demonstrating how GD Arena coordinates turns, voices, and student reactions:
-
-```markdown
-[00:01] 👨‍🏫 Prof. Sharma (Moderator) [Voice: ratan]
-"Welcome everyone to today's group discussion on 'Is AI going to eliminate entry-level software engineering jobs?' 
-Please maintain academic rigor, listen actively, and respect differing viewpoints. The floor is open."
-
-[00:18] 🧑‍🎓 You (Candidate) [Spoken via Mic / Text Input]
-"Good morning everyone. In my view, while generative coding assistants automate syntax generation 
-and repetitive boilerplate, entry-level engineers are vital for domain-specific problem formulation, 
-edge-case testing, and understanding user nuances that models frequently hallucinate."
-
-[00:45] ⚡ Aarav (Assertive) [Voice: aditya]
-"I see your perspective Candidate, but we must acknowledge enterprise economics. Research shows GitHub Copilot 
-and automated agents already generate 46% of production code. When senior developers paired with AI 
-operate at 3x velocity, why would tech firms spend 9 months training fresh graduates?"
-
-[01:18] 📊 Meera (Analytical) [Voice: ishita]
-"Aarav makes a compelling short-term efficiency point, but we have to analyze technical debt. Recent studies 
-from GitClear show code duplication and refactoring debt jump by 32% with unchecked AI generation. 
-If we eliminate entry-level roles, where will senior architects come from in ten years?"
-
-[01:38] 🧑‍🎓 You (Candidate) [Pressed Spacebar - Barge-in Interruption]
-"Exactly Meera! Furthermore, senior architects can't maintain millions of lines of auto-generated code 
-without fresh engineers thoroughly testing the domain logic."
-
-[01:55] 👨‍🏫 Prof. Sharma (Moderator) [Voice: ratan]
-"A well-timed interjection by the candidate that connects architecture with team longevity. Kabir, what are your thoughts?"
+    Engine --> Turn --> Groq
+    Turn -.fallback.-> Gemini
+    Engine --> TTS --> Gnani
+    TTS -.fallback.-> Sarvam
+    TTS -- "SSE · 24kHz PCM chunks" --> Player --> UI
+    Mic --> Gateway --> Sarvam
+    Mic -.fallback.-> WebSpeech["Browser speech API"]
+    Engine --> Report --> Gemini
 ```
 
+### Latency budget
+
+Measured on a live room (voice mode, 3 peers, Groq + Gnani):
+
+| Moment | Before | Now | How |
+|---|---|---|---|
+| First voice after entering | ~5–8 s | **~2.7 s** | Opening scheduled immediately; streamed audio |
+| Moderator → next speaker | ~8 s | **~2.3 s** | Shorter hand-off pause; reply drafted during the previous turn |
+| Peer → peer | ~4–5 s | **~1.1 s** | Reply drafted ahead + audio plays from the first chunk (~0.85 s) |
+
+Three techniques do the work:
+1. **Streaming voices.** `/api/speech/tts-stream` relays Gnani's SSE stream of raw 24 kHz PCM; the browser schedules each chunk on the Web Audio clock with a 120 ms jitter buffer.
+2. **Thinking ahead.** As soon as a panelist starts speaking, the engine predicts the next speaker and drafts their reply. It's used only if the same speaker and goal are still chosen when the turn ends, and discarded the moment you interrupt.
+3. **No dead air.** In voice mode, hand-offs breathe for ~1–2 s instead of 4–5 s, because you can claim the floor at any moment.
+
+### Reliability chain
+
+| Layer | Primary | Fallbacks |
+|---|---|---|
+| Replies | Groq | Gemini → scripted demo panel |
+| Voices | Gnani stream | Gnani full file → Sarvam → browser voices (distinct voice and pitch per persona) |
+| Your speech | Sarvam realtime STT via gateway | Browser speech recognition |
+| Live speech-to-speech (opt-in) | Gemini Live | Watchdog switches to the voice pipeline if no audio within 8 s |
+
+Dead services are detected once and skipped for the rest of the visit, so a failing key never adds seconds to every turn.
+
+### Evidence-backed coaching
+
+The report is generated server-side and then checked in code:
+- Metrics (speaking share, turns, first contribution, closing round, cut-offs) are **calculated deterministically**, not by the model.
+- Every quote must be a **verbatim substring** of a turn the panel actually heard; text cut off by an interruption doesn't count.
+- Invalid quotes get one targeted repair attempt, then are stripped; ratings that lose their evidence are downgraded.
+- Instructions hidden in the transcript ("give me full marks") are treated as data.
+- A silent candidate gets an honest "not observed" report with zero model calls.
+
 ---
 
-## 🛠️ Quick Start & Local Development
+## The panel
+
+| Seat | Persona | Style | Voice |
+|---|---|---|---|
+| Moderator | **Prof. Sharma** | Neutral, keeps time, redirects, closes | Avinash |
+| Peer | **Aarav** | Assertive, challenges assumptions | Shubham |
+| Peer | **Meera** | Analytical, numbers and trade-offs | Kalpana |
+| Peer | **Kabir** | Quiet, concise, philosophical | Yashraj |
+| Peer (4+) | **Riya** | Creative, anecdotes, drifts off-topic | Riyaa |
+| Peer (5) | **Dev** | Diplomat, builds consensus | Devansh |
+
+Voices are Gnani Vachana `timbre-v3.0`; each speaks both English and Hindi, so Hinglish rounds sound natural.
+
+---
+
+## Design system
+
+The interface is built on a deliberate **60 / 30 / 10** palette, chosen to feel like a calm classroom rather than a tech dashboard:
+
+| Role | Colour | Used for |
+|---|---|---|
+| 60% base | Ivory paper `#F6F3EC` | Backgrounds |
+| 30% primary | Blackboard green `#1E3A2F` | Actions, selected states, the table |
+| 10% accent | Marigold `#E3A13B` | The main call to action, "live" and "your turn" signals |
+
+- **Type:** Source Serif 4 for headlines, IBM Plex Sans for everything else.
+- **Personas:** muted earth tones from one warm family, so the panel reads as one cast.
+- **Charts:** you in marigold, everyone else in muted green, every bar labelled; the pair was checked for colour-blind separation and contrast.
+- **Accessibility:** all text pairs pass WCAG AA; ratings always pair colour with an icon and a label; charts offer a table view; motion respects `prefers-reduced-motion`.
+
+---
+
+## Getting started
 
 ### Prerequisites
-- **Node.js**: `v18.x`, `v20.x`, or `v24.x`
-- **npm**: `v9.x` or higher
-- **Modern Browser**: Google Chrome, Microsoft Edge, Brave, or Safari with microphone permissions enabled.
+- Node.js 20+ and npm
+- Chrome, Edge or Safari (the microphone needs `localhost` or HTTPS)
 
-### 1. Clone the Repository
+### Install and run
+
 ```bash
 git clone https://github.com/at9501264-stack/Azisly.ai.git
 cd Azisly.ai
 npm install
-```
-
-### 2. Configure Environment Variables
-Copy `.env.example` to create your local `.env.local`:
-```bash
-cp .env.example .env.local
-```
-
-Edit `.env.local` with your credentials:
-```env
-# Primary Conversational LLM: Groq (Ultra-Fast Response)
-GROQ_API_KEY=gsk_your_groq_api_key_here
-GROQ_MODEL=qwen/qwen3.8-27b
-
-# Fallback Conversational LLM: Google Gemini
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
-REPORT_MODEL=gemini-2.5-flash
-
-# Sarvam AI Voice Engine (bulbul:v3 TTS & saaras:v4 STT)
-SARVAM_API_KEY=sk_your_sarvam_api_key_here
-SARVAM_API_KEYS=sk_key1,sk_key2,sk_key3
-
-# Voice Gateway Port
-VOICE_GATEWAY_PORT=3001
-```
-
-> **Note**: GD Arena includes an offline scripted fallback engine. If API keys are omitted, the application runs in scripted demo mode using browser Web Speech synthesis with zero crashes.
-
-### 3. Launch Development Server
-A single command boots both the Next.js web application (port 3000) and the Voice Gateway (port 3001):
-```bash
+cp .env.example .env.local   # then add your keys
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+`npm run dev` starts the web app on [http://localhost:3000](http://localhost:3000) and the voice gateway on port 3001.
+
+No keys yet? Everything still runs: the scripted demo panel speaks with browser voices.
+
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `GROQ_API_KEY`, `GROQ_MODEL` | Panel replies (primary) |
+| `GEMINI_API_KEY`, `GEMINI_MODEL`, `REPORT_MODEL` | Fallback replies and the coaching report |
+| `GNANI_API_KEY` | Panel voices, streamed (primary) |
+| `SARVAM_API_KEY`, `SARVAM_API_KEYS` | Backup voices and realtime speech-to-text |
+| `NEXT_PUBLIC_ENABLE_LIVE_S2S`, `GEMINI_S2S_MODEL` | Optional Gemini Live speech-to-speech channel (off by default) |
+| `VOICE_GATEWAY_PORT`, `NEXT_PUBLIC_VOICE_GATEWAY_URL`, `ALLOWED_ORIGIN_HOSTS` | Voice gateway location and allowed origins |
+| `ALLOWED_DEV_ORIGINS` | Extra hostnames (e.g. your LAN IP) allowed to open the dev server |
+
+See [`.env.example`](.env.example) for details. Keys live only on the server and are never sent to the browser.
+
+### Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Web app + voice gateway |
+| `npm run build` / `npm start` | Production build and server |
+| `npm run lint` | ESLint |
+| `npm run verify` | Core engine checks: turn state machine, metrics, evidence verification |
+| `npm run voice-gw` | Voice gateway on its own |
 
 ---
 
-## 🚢 Production Deployment
+## Project structure
 
-### 1. Vercel Deployment (Frontend & Serverless API Routes)
-The Next.js application is configured for Vercel deployment:
-- **Production URL**: [https://gdarena-liard.vercel.app](https://gdarena-liard.vercel.app)
-- Deploy using Vercel CLI:
-```bash
-npx vercel --prod
 ```
-
-### 2. Standalone Voice Gateway Hosting
-For production streaming audio WebSocket support, deploy `src/server/voiceGateway.ts` as a long-running Node service on Render, Railway, Fly.io, or an EC2 instance:
-```bash
-npx tsx src/server/voiceGateway.ts
+src/
+├── app/
+│   ├── api/discussion/   turn · report · config
+│   ├── api/speech/       tts · tts-stream · config
+│   ├── layout.tsx        fonts, theme, extension-attribute guard
+│   └── page.tsx          setup → room → report, by session phase
+├── components/
+│   ├── setup/            landing page, room setup, mic check
+│   ├── room/             table stage, faces, seats, controls, transcript
+│   ├── summary/          report page, airtime chart, timeline, skill cards
+│   └── ui/               avatars, segmented controls
+├── context/SessionContext.tsx   turn engine and floor rules
+├── lib/                  speaker selection, prompts, metrics, evidence checks, exports
+├── services/             audio playback & level meter, speech recognition, voice providers
+└── server/voiceGateway.ts       WebSocket bridge for realtime speech
 ```
-
-Set `NEXT_PUBLIC_VOICE_GATEWAY_URL` in your frontend environment to point to your deployed gateway host.
 
 ---
 
-## 🧪 Verification & Acceptance Testing
+## Deployment
 
-Run full static analysis and verification suites:
-```bash
-# 1. Run ESLint code quality checks
-npm run lint
+- **Web app:** deploy to Vercel (`npx vercel --prod`) with the same environment variables. Live: [gdarena-liard.vercel.app](https://gdarena-liard.vercel.app)
+- **Voice gateway:** run `npx tsx src/server/voiceGateway.ts` as a long-lived Node service (Render, Railway, Fly.io…) and point `NEXT_PUBLIC_VOICE_GATEWAY_URL` at it. Without it, speech recognition falls back to the browser.
+- Serve over **HTTPS** in production; browsers block the microphone elsewhere.
 
-# 2. Run TypeScript strict type verification
-npx tsc --noEmit
+---
 
-# 3. Execute complete production build
-npm run build
-```
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Panel is silent or uses robotic voices | Check `GNANI_API_KEY`; a banner appears in the room whenever backup voices are in use |
+| "You exceeded your current quota" in the gateway log | Gemini Live quota is exhausted; leave `NEXT_PUBLIC_ENABLE_LIVE_S2S=false` |
+| Buttons don't respond when opened from another device | Add that device's hostname to `ALLOWED_DEV_ORIGINS` and restart `npm run dev` |
+| Mic doesn't work on a LAN address | Browsers allow the mic only on `localhost` or HTTPS |
+| Hydration warning mentioning `bis_skin_checked` | Caused by a security browser extension; the app strips it automatically |
 
 ---
 
 <div align="center">
 
-### Built with ❤️ for Students, Job Aspirants & Placement Cells Worldwide
+Built for students, job aspirants and placement cells.
 
-[**Try GD Arena Live**](https://gdarena-liard.vercel.app) • [**Report an Issue**](https://github.com/at9501264-stack/Azisly.ai/issues) • [**GitHub Repository**](https://github.com/at9501264-stack/Azisly.ai)
+[Try GD Arena](https://gdarena-liard.vercel.app) · [Report an issue](https://github.com/at9501264-stack/Azisly.ai/issues)
+
+<sub>AI practice coaching based on observable behaviour in each session; not an official placement assessment.</sub>
 
 </div>

@@ -13,6 +13,7 @@
 
 import { AIPatience } from '@/types/session';
 import { audioPlaybackService } from '@/services/audio/audioPlaybackService';
+import { attachInputMeter, detachInputMeter } from '@/services/audio/audioLevelMeter';
 
 export interface SpeechRecognitionCallbacks {
   onSpeechStart?: () => void;
@@ -49,6 +50,8 @@ export class SpeechRecognitionService {
   private currentPartialText = '';
   private silenceTimer: NodeJS.Timeout | null = null;
   private callbacks: SpeechRecognitionCallbacks = {};
+  /** Once the gateway STT fails, go straight to browser recognition for this page session */
+  private gatewayUnavailable = false;
 
   private options: SpeechRecognitionOptions = {
     patience: 'balanced',
@@ -110,7 +113,7 @@ export class SpeechRecognitionService {
     this.isSpeaking = false;
 
     // Try Gateway if preferred
-    if (this.options.preferGateway) {
+    if (this.options.preferGateway && !this.gatewayUnavailable) {
       const gatewaySuccess = await this.startGatewaySTT();
       if (gatewaySuccess) {
         this.isListening = true;
@@ -189,6 +192,7 @@ export class SpeechRecognitionService {
             }
           } else if (data.type === 'status' && !data.ready) {
             // Gateway reports Sarvam key not configured; fall back
+            this.gatewayUnavailable = true;
             this.stopAudioCapture();
             this.startWebSpeechSTT();
           }
@@ -199,6 +203,7 @@ export class SpeechRecognitionService {
 
       ws.onerror = () => {
         console.warn('[SpeechService] Voice Gateway WS error. Falling back to Web Speech.');
+        this.gatewayUnavailable = true;
         this.stopAudioCapture();
         this.startWebSpeechSTT();
       };
@@ -219,6 +224,7 @@ export class SpeechRecognitionService {
       this.audioContext = audioContext;
 
       const source = audioContext.createMediaStreamSource(stream);
+      attachInputMeter(audioContext, source);
       // Use 2048 buffer size (~128ms chunks at 16kHz)
       const audioCtxWithProcessor = audioContext as unknown as {
         createScriptProcessor: (
@@ -378,10 +384,30 @@ export class SpeechRecognitionService {
 
       recognition.start();
       this.browserRecognition = recognition;
+      void this.startLevelMeterOnly();
       return true;
     } catch (err) {
       console.warn('[SpeechService] Web Speech API initialization failed:', err);
       return false;
+    }
+  }
+
+  /** Browser recognition has no audio graph, so open the mic separately just to drive the level meter. */
+  private async startLevelMeterOnly() {
+    if (this.audioContext || typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (!this.isListening && !this.browserRecognition) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      this.mediaStream = stream;
+      const ctx = new (window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      this.audioContext = ctx;
+      attachInputMeter(ctx, ctx.createMediaStreamSource(stream));
+    } catch {
+      // Meter is cosmetic; recognition still works without it
     }
   }
 
@@ -487,10 +513,13 @@ export class SpeechRecognitionService {
   /**
    * Finalizes the student's turn after sufficient silence.
    */
-  private commitTurnIfReady() {
+  /** Returns true when a real turn was handed to onTurnCommitted. */
+  private commitTurnIfReady(): boolean {
     const textToCommit = (this.accumulatedFinalText || this.currentPartialText).trim();
+    let committed = false;
 
     if (textToCommit && !this.isHallucinationOrNoise(textToCommit)) {
+      committed = true;
       this.callbacks.onTurnCommitted?.(textToCommit);
     } else if (textToCommit) {
       console.log(`[SpeechService] Discarded noise/hallucination turn: "${textToCommit}"`);
@@ -503,17 +532,19 @@ export class SpeechRecognitionService {
     this.consecutiveSpeechFrames = 0;
     this.callbacks.onPartialTranscript?.('');
     this.callbacks.onStatusChange?.('listening');
+    return committed;
   }
 
   /**
    * Manual commit trigger (e.g. user presses 'Submit Spoken Turn' or enter).
    */
-  public forceCommit(): void {
+  public forceCommit(): boolean {
     if (this.silenceTimer) clearTimeout(this.silenceTimer);
-    this.commitTurnIfReady();
+    return this.commitTurnIfReady();
   }
 
   private stopAudioCapture() {
+    detachInputMeter();
     if (this.processor) {
       try {
         this.processor.disconnect();

@@ -1,5 +1,82 @@
 @import "tailwindcss";
 
+/*
+ * GD Arena palette — 60 / 30 / 10
+ *   60%  Ivory paper      : calm, bookish base (classroom notebook)
+ *   30%  Blackboard green : primary actions and selected states (trust, focus)
+ *   10%  Marigold         : the single accent for "live" and the main call to action
+ * Persona colours are muted earth tones from the same warm family so the
+ * panel reads as one cast, not a rainbow.
+ */
+@theme {
+  --color-paper: #f6f3ec;
+  --color-paper-2: #efebe2;
+  --color-card: #fbf9f4;
+  --color-ink: #1a1a17;
+  --color-muted: #6b675e;
+  --color-hair: #e2dccf;
+
+  --color-forest: #1e3a2f;
+  --color-forest-hover: #172e25;
+  --color-forest-soft: #e3ebe5;
+  --color-on-forest-muted: #b9c4bc;
+
+  --color-marigold: #e3a13b;
+  --color-marigold-soft: #f7e6c8;
+
+  --color-danger: #a8321f;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translate3d(0, 8px, 0); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@theme inline {
+  --font-serif: var(--font-source-serif), Georgia, serif;
+  --font-body: var(--font-plex-sans), system-ui, sans-serif;
+}
+
+/* Room faces: natural blinking and a slight head bob while talking */
+.face-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: face-blink 4.6s infinite;
+}
+.face-talk {
+  animation: face-talk 1.6s ease-in-out infinite;
+}
+@keyframes face-blink {
+  0%, 94%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+@keyframes face-talk {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30% { transform: translateY(-1.5px) rotate(-1deg); }
+  70% { transform: translateY(0.5px) rotate(0.8deg); }
+}
+
+/* Equaliser bars for "speaking" chips */
+.eq-bar {
+  animation: eq-bar 0.9s ease-in-out infinite;
+  transform-origin: bottom;
+}
+@keyframes eq-bar {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .face-talk,
+  .eq-bar {
+    animation: none !important;
+  }
+}
+
 @layer base {
   :root {
     --background: #0c0c0e;

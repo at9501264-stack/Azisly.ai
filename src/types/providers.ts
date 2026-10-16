@@ -59,7 +59,11 @@ export interface SpeechSynthesisOptions {
   voiceId: string;
   languageCode: 'en-IN' | 'hi-IN';
   pace?: number;
+  /** Voice pitch hint, used to keep personas distinct on fallback voices */
+  pitch?: number;
   abortSignal?: AbortSignal;
+  /** Called once when premium synthesis is unavailable and the browser voice is used */
+  onUpstreamUnavailable?: () => void;
   onStart?: () => void;
   onEnd?: () => void;
   onError?: (err: Error) => void;

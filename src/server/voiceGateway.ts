@@ -70,12 +70,6 @@ function getRawDataByteLength(message: RawData): number {
   return (message as ArrayBuffer).byteLength;
 }
 
-function rawDataToBuffer(message: RawData): Buffer {
-  if (Buffer.isBuffer(message)) return message;
-  if (Array.isArray(message)) return Buffer.concat(message);
-  return Buffer.from(message as ArrayBuffer);
-}
-
 const PORT = Number.parseInt(process.env.VOICE_GATEWAY_PORT || "3001", 10);
 const MAX_MESSAGE_BYTES = 64 * 1024; // 64 KB per chunk
 const MAX_SESSION_DURATION_MS = 15 * 60 * 1000; // 15 minutes limit per connection
@@ -263,10 +257,20 @@ CRITICAL CONVERSATIONAL RULES FOR ULTRA-LOW LATENCY SPEECH-TO-SPEECH:
 
     let geminiSession: LiveSession | null = null;
     let isClosed = false;
+    // Set while we deliberately replace a session (voice switch) so its close isn't reported as a failure
+    let isReplacingSession = false;
+
+    const reportUnavailable = (reason: string) => {
+      if (isClosed || clientWs.readyState !== WebSocket.OPEN) return;
+      clientWs.send(
+        JSON.stringify({ type: "status", ready: false, message: reason }),
+      );
+    };
 
     const initSession = async (voiceName: string) => {
       try {
         if (geminiSession) {
+          isReplacingSession = true;
           try {
             geminiSession.close();
           } catch {
@@ -410,6 +414,14 @@ CRITICAL CONVERSATIONAL RULES FOR ULTRA-LOW LATENCY SPEECH-TO-SPEECH:
                 "[VoiceGW:S2S] Gemini Live session closed:",
                 closeInfo,
               );
+              if (isReplacingSession) {
+                isReplacingSession = false;
+                return;
+              }
+              // Unexpected close (quota, auth, network): tell the client so it can fall back
+              if (closeInfo && closeInfo !== "normal") {
+                reportUnavailable(closeInfo);
+              }
             },
           },
         });
@@ -433,20 +445,6 @@ CRITICAL CONVERSATIONAL RULES FOR ULTRA-LOW LATENCY SPEECH-TO-SPEECH:
 
     await initSession(initialVoice);
 
-    const sendBinaryAudioChunk = (buf: Buffer) => {
-      if (!geminiSession) return;
-      try {
-        geminiSession.sendRealtimeInput({
-          audio: {
-            data: buf.toString("base64"),
-            mimeType: "audio/pcm;rate=16000",
-          },
-        });
-      } catch {
-        // Socket write failed
-      }
-    };
-
     const processControlCommand = async (cmd: ClientControlCommand) => {
       if (cmd.type === "trigger_turn") {
         currentSpeakerId = cmd.speakerId || currentSpeakerId;
@@ -463,11 +461,11 @@ CRITICAL CONVERSATIONAL RULES FOR ULTRA-LOW LATENCY SPEECH-TO-SPEECH:
           cmd.instruction ||
           `[Turn for ${currentSpeakerName} (${currentRole})]: Please deliver a 1-2 sentence contribution on the topic "${topic}". Respond concisely and directly to what was said earlier.`;
 
-        geminiSession?.sendRealtimeInput({ text: promptText });
-      } else if (cmd.type === "student_text" && cmd.text) {
-        geminiSession?.sendRealtimeInput({
-          text: `[Candidate says]: "${cmd.text}"`,
-        });
+        if (!geminiSession) {
+          reportUnavailable("Live voice session is not available.");
+          return;
+        }
+        geminiSession.sendRealtimeInput({ text: promptText });
       } else if (
         cmd.type === "switch_voice" &&
         cmd.voiceName &&
@@ -488,7 +486,7 @@ CRITICAL CONVERSATIONAL RULES FOR ULTRA-LOW LATENCY SPEECH-TO-SPEECH:
       }
 
       if (isBinary) {
-        sendBinaryAudioChunk(rawDataToBuffer(data));
+        // Candidate speech is transcribed client-side; ignore stray audio frames
         return;
       }
 

@@ -531,8 +531,8 @@ MANDATORY RULES FOR REPAIR:
       {
         success: false,
         error: isQuotaOrRateLimit
-          ? 'LLM API rate limit or quota exceeded while generating report. Please retry in a few moments.'
-          : 'Failed to generate discussion report: ' + errorMessage.slice(0, 150),
+          ? 'The feedback service is busy right now. Please retry in a few moments.'
+          : 'Your feedback report could not be generated. Please retry.',
         retryable: true
       },
       { status: 500 }
