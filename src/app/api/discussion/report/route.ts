@@ -377,14 +377,28 @@ export async function POST(req: NextRequest) {
     const userPrompt = buildReportUserPrompt(promptParams);
 
     // 7. Call LLM (Groq primary, Gemini fallback)
+    // The report isn't latency-critical, so ride out short rate-limit / overload spikes
+    const RETRY_DELAYS_MS = [6000, 12000];
+    const isTransient = (err: unknown) =>
+      /429|rate limit|quota|503|unavailable|high demand|overloaded/i.test(
+        err instanceof Error ? err.message : String(err)
+      );
     const callModel = async (prompt: string) => {
-      return await generateLlmCompletion({
-        systemInstruction,
-        userPrompt: prompt,
-        temperature: 0.2, // Low temperature for high adherence to transcript quotes
-        maxTokens: 2500,
-        timeoutMs: 35000
-      });
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await generateLlmCompletion({
+            systemInstruction,
+            userPrompt: prompt,
+            temperature: 0.2, // Low temperature for high adherence to transcript quotes
+            maxTokens: 2500,
+            timeoutMs: 35000
+          });
+        } catch (err) {
+          if (attempt >= RETRY_DELAYS_MS.length || !isTransient(err)) throw err;
+          console.warn(`[API /api/discussion/report] Providers busy, retrying in ${RETRY_DELAYS_MS[attempt] / 1000}s`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+        }
+      }
     };
 
     const llmResult = await callModel(userPrompt);
