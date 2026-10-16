@@ -39,17 +39,128 @@ async function* sseAudioChunks(body: ReadableStream<Uint8Array>): AsyncGenerator
   }
 }
 
+/** A voice streamed into memory ahead of its turn. */
+interface PreparedVoice {
+  chunks: string[];
+  done: boolean;
+  failed: boolean;
+  wake: (() => void) | null;
+}
+
 export class SarvamSpeechProvider implements ISpeechSynthesisProvider {
   public readonly name = 'Sarvam AI Bulbul (v3)';
   public readonly isAvailable = true;
   private isUpstreamDown = false;
   private isStreamDown = false;
+  private prepared = new Map<string, PreparedVoice>();
+
+  /**
+   * Start streaming a turn's voice into memory before it is due, so it can play the
+   * instant its turn comes. Aborting `signal` discards it.
+   */
+  public prepare(
+    turnId: string,
+    text: string,
+    options: { voiceId: string; languageCode: 'en-IN' | 'hi-IN'; pace?: number; signal?: AbortSignal }
+  ): void {
+    if (this.isStreamDown || this.isUpstreamDown || this.prepared.has(turnId) || options.signal?.aborted) return;
+
+    const entry: PreparedVoice = { chunks: [], done: false, failed: false, wake: null };
+    const notify = () => {
+      const wake = entry.wake;
+      entry.wake = null;
+      wake?.();
+    };
+    this.prepared.set(turnId, entry);
+    options.signal?.addEventListener('abort', () => {
+      this.prepared.delete(turnId);
+      entry.failed = true;
+      entry.done = true;
+      notify();
+    });
+    // Never hold audio for a turn that didn't happen
+    setTimeout(() => this.prepared.delete(turnId), 90_000);
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/speech/tts-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            speaker: options.voiceId,
+            languageCode: options.languageCode,
+            pace: options.pace ?? 1.0
+          }),
+          signal: options.signal
+        });
+        if (!response.ok || !response.body || !response.headers.get('content-type')?.includes('text/event-stream')) {
+          entry.failed = true;
+          return;
+        }
+        for await (const chunk of sseAudioChunks(response.body)) {
+          entry.chunks.push(chunk);
+          notify();
+        }
+      } catch {
+        entry.failed = true;
+      } finally {
+        entry.done = true;
+        notify();
+      }
+    })();
+  }
+
+  /** Yields buffered chunks first, then the rest as they arrive. */
+  private async *drainPrepared(entry: PreparedVoice): AsyncGenerator<string> {
+    let index = 0;
+    while (true) {
+      if (index < entry.chunks.length) {
+        yield entry.chunks[index++];
+        continue;
+      }
+      if (entry.done) return;
+      await new Promise<void>((resolve) => {
+        entry.wake = resolve;
+      });
+    }
+  }
 
   public async synthesizeSpeech(
     turnId: string,
     text: string,
     options: SpeechSynthesisOptions
   ): Promise<SpeechSynthesisResult | null> {
+    // 0. Instant: this turn's voice was prepared while the previous speaker talked
+    const prepared = this.prepared.get(turnId);
+    if (prepared) {
+      this.prepared.delete(turnId);
+      const usable = !(prepared.failed && prepared.chunks.length === 0);
+      if (usable) {
+        try {
+          if (
+            await audioPlaybackService.playStream(
+              { turnId, speakerId: options.voiceId, text, languageCode: options.languageCode, pace: options.pace, pitch: options.pitch },
+              {
+                onStart: options.onStart,
+                onEnd: options.onEnd,
+                onInterrupted: options.onInterrupted,
+                onError: options.onError,
+                onAudioBlocked: options.onAudioBlocked
+              },
+              this.drainPrepared(prepared),
+              STREAM_SAMPLE_RATE
+            )
+          ) {
+            return null;
+          }
+        } catch {
+          // Fall through to a fresh request
+        }
+      }
+      if (options.abortSignal?.aborted) return null;
+    }
+
     // 1. Lowest latency: stream the voice and start speaking on the first chunk
     if (!this.isStreamDown) {
       try {

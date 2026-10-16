@@ -67,7 +67,7 @@ GD Arena puts that whole room on demand:
 | 🎙️ **Human-sounding voices** | Every panelist has a distinct Indian voice, in English or natural Hinglish. Voices stream, so a panelist starts talking ~1 s after deciding what to say. |
 | ✋ **You control the floor** | Your mic is off while anyone else speaks. Tap the mic or press <kbd>Space</kbd> to interrupt; the panel waits until you're done. |
 | 👀 **A room that feels alive** | Illustrated faces blink, turn to look at whoever is talking, and move their lips with the loudness of the actual voice. |
-| ⚡ **Low latency by design** | The next reply is drafted while the current panelist is still speaking. Measured peer-to-peer gap: ~1.1 s. |
+| ⚡ **Conversation-speed turns** | The next reply *and its voice* are prepared while the current panelist is still speaking. Measured peer-to-peer gap: ~0.3 s. |
 | 🧾 **Evidence-backed coaching** | Six skill ratings, each with verified quotes, a "what you could have said" moment and a three-step plan. |
 | 🛟 **Never stuck** | Every service has a fallback chain, down to a fully offline demo panel. A failing key is detected once and skipped. |
 | 📱 **Works on phones** | Responsive from 390 px up; the table becomes a stacked panel on small screens. |
@@ -316,25 +316,28 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A[Previous speaker starts] -->|draft next reply in background| B[Reply text ready]
-    B --> C[POST /api/speech/tts-stream]
-    C --> D[Gnani SSE: raw PCM chunks]
-    D -->|first chunk ≈ 0.85 s| E[Schedule on Web Audio clock<br/>120 ms jitter buffer]
-    E --> F[Speaker heard; lips follow loudness]
+    A[Panelist A starts speaking] -->|predict next speaker| B[Draft B's reply<br/>Groq]
+    B -->|immediately| C[Stream B's voice into memory<br/>Gnani SSE · 24 kHz PCM]
+    A --> D[A finishes]
+    D -->|~0.3 s breath| E[Play B from buffered audio<br/>Web Audio clock]
+    C --> E
+    E --> F[B heard; lips follow loudness]
 ```
 
-Measured in a live room (voice mode, 3 peers):
+Measured in a live room (voice mode, 3 peers, production build):
 
-| Moment | Before the redesign | Now |
-|---|---|---|
-| First voice after entering | ~5–8 s | **~2.7 s** |
-| Moderator → next speaker | ~8 s | **~2.3 s** |
-| Peer → peer | ~4–5 s | **~1.1 s** |
+| Moment | Original | Now | Why |
+|---|---|---|---|
+| First voice after entering | ~5–8 s | **~1.7 s** | Opening drafted and voiced during the mic check |
+| Moderator → next speaker | ~8 s | **~1.4 s** | A deliberate pause that offers you the floor |
+| Peer → peer | ~4–5 s | **~0.3 s** | Next reply *and* voice prepared during the previous turn |
 
-Three techniques do the work:
-1. **Streaming voices.** The server relays Gnani's stream of raw 24 kHz PCM, and the browser plays it from the first chunk instead of waiting for a whole file (~3.8 s).
-2. **Thinking ahead.** When a panelist starts speaking, the engine predicts the next speaker and drafts their reply. The draft is used only if the same speaker and goal are still chosen, and is discarded the moment you interrupt.
-3. **No dead air.** In voice mode, hand-offs breathe for ~1–2 s rather than 4–5 s, because you can claim the floor at any time.
+How it gets there:
+1. **Streaming voices.** The server relays Gnani's stream of raw 24 kHz PCM; the browser plays from the first chunk (~0.85 s) instead of waiting for the whole file (~3.8 s).
+2. **Thinking ahead.** When a panelist starts speaking, the engine predicts the next speaker, drafts their reply, and streams that reply's voice into memory. It's used only if the same speaker and goal are still chosen, and discarded the moment you interrupt.
+3. **Warm start.** While you test your mic, Prof. Sharma's opening is already written and voiced.
+4. **Close to the voices.** Server functions run in Mumbai (`bom1`, see `vercel.json`), next to the voice provider and to Indian users.
+5. **No dead air.** Peer hand-offs breathe for ~0.3 s; only moderator hand-offs pause longer, to offer you the floor.
 
 ### Reliability chain
 

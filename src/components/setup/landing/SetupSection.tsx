@@ -97,7 +97,7 @@ function ChoiceCard({
 }
 
 export function SetupSection() {
-  const { state, startSession, isRestoredSession, resumeSession, resetSession } = useSession();
+  const { state, startSession, isRestoredSession, resumeSession, resetSession, prepareOpening } = useSession();
 
   const [selectedTopicId, setSelectedTopicId] = useState<string>(PRESET_TOPICS[0].id);
   const [isCustomTopicMode, setIsCustomTopicMode] = useState(false);
@@ -146,6 +146,8 @@ export function SetupSection() {
     }
 
     if (interactionMode === "voice") {
+      // Draft and voice the moderator's opening while the candidate checks their mic
+      prepareOpening(buildRoomConfig("voice"));
       setIsPreflightModalOpen(true);
     } else {
       startSession(buildRoomConfig("text"));
@@ -165,13 +167,17 @@ export function SetupSection() {
     <section id="setup" className="scroll-mt-16 py-16 lg:py-20">
       <AudioPreflightModal
         isOpen={isPreflightModalOpen}
-        onClose={() => setIsPreflightModalOpen(false)}
+        onClose={() => {
+          setIsPreflightModalOpen(false);
+          prepareOpening(null);
+        }}
         onConfirmVoiceMode={() => {
           setIsPreflightModalOpen(false);
           startSession(buildRoomConfig("voice"));
         }}
         onSwitchToTextMode={() => {
           setIsPreflightModalOpen(false);
+          prepareOpening(null);
           setInteractionMode("text");
           startSession(buildRoomConfig("text"));
         }}

@@ -72,6 +72,8 @@ interface SessionContextType {
   generateReport: (forceRegenerate?: boolean) => Promise<void>;
   /** Shown when premium voices are unavailable and a fallback voice is in use */
   voiceNotice: string | null;
+  /** Draft and voice the moderator's opening ahead of time (null cancels) */
+  prepareOpening: (config: RoomConfig | null) => void;
 }
 
 /**
@@ -106,6 +108,18 @@ function getStudentOpportunityPauseMs(patience: AIPatience): number {
   if (patience === "quick") return 3000;
   if (patience === "patient") return 5500;
   return 4000;
+}
+
+// Voice mode: a short breath between panelists, like a real conversation
+function getVoiceTurnPauseMs(patience: AIPatience): number {
+  if (patience === "quick") return 150;
+  if (patience === "patient") return 600;
+  return 300;
+}
+
+/** Identity of a room setup, used to match a warmed-up opening to the session that starts */
+function roomConfigKey(config: RoomConfig): string {
+  return [config.topic, config.language, config.participantCount, config.durationMinutes, config.preferredEngine].join("|");
 }
 
 // Voice mode: the candidate can interrupt any time, so hand-offs only need a natural breath
@@ -176,6 +190,12 @@ export function SessionProvider({
   const s2sWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Voice turn whose audio is still loading; dropped from the transcript if never heard
   const pendingTtsTurnRef = useRef<{ id: string; started: boolean } | null>(null);
+  // Moderator opening drafted (and voiced) while the candidate is on the mic check
+  const openingPrefetchRef = useRef<{
+    key: string;
+    controller: AbortController;
+    promise: Promise<TranscriptTurn>;
+  } | null>(null);
   // Next panelist's reply, drafted while the current one is still speaking
   const prefetchRef = useRef<{
     genId: number;
@@ -590,6 +610,18 @@ export function SessionProvider({
         controller.signal,
       );
       promise.catch(() => {}); // Failures fall back to a fresh request
+      // Also stream the reply's voice into memory so it plays the instant its turn comes
+      promise
+        .then((turn) => {
+          if (controller.signal.aborted) return;
+          sarvamSpeechProvider.prepare(turn.id, turn.text, {
+            voiceId: decision.speaker.voice?.sarvamVoice || "ratan",
+            languageCode: base.config.language === "hinglish" ? "hi-IN" : "en-IN",
+            pace: decision.speaker.voice?.pace ?? 1.0,
+            signal: controller.signal,
+          });
+        })
+        .catch(() => {});
       prefetchRef.current = {
         genId,
         afterTurnId: spokenTurn.id,
@@ -884,7 +916,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
         prefetched.genId === genId &&
         prefetched.speakerId === nextSpeaker.id &&
         prefetched.objective === decision.objective &&
-        lastTurn?.id === prefetched.afterTurnId;
+        (lastTurn?.id ?? "") === prefetched.afterTurnId;
       if (prefetched && !canUsePrefetch) prefetched.controller.abort();
 
       // Setup AbortController for in-flight request
@@ -1054,7 +1086,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
               const isModTurn = nextSpeaker.role === "moderator";
               const pauseBetween = isModTurn
                 ? getVoiceOpportunityPauseMs(current.config.patience)
-                : getTurnPauseMs(current.config.patience);
+                : getVoiceTurnPauseMs(current.config.patience);
 
               if (isModTurn) {
                 setState((prev) => ({
@@ -1517,7 +1549,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
             const isModTurn = speaker.role === "moderator";
             const pauseBetween = isModTurn
               ? getVoiceOpportunityPauseMs(stateRef.current.config.patience)
-              : getTurnPauseMs(stateRef.current.config.patience);
+              : getVoiceTurnPauseMs(stateRef.current.config.patience);
 
             if (isModTurn) {
               setState((prev) => ({
@@ -1674,10 +1706,74 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
     submitStudentTurn,
   ]);
 
+  const prepareOpening = useCallback(
+    (config: RoomConfig | null) => {
+      if (!config || (config.mode || "voice") !== "voice") {
+        openingPrefetchRef.current?.controller.abort();
+        openingPrefetchRef.current = null;
+        return;
+      }
+      const key = roomConfigKey(config);
+      if (openingPrefetchRef.current?.key === key) return;
+      openingPrefetchRef.current?.controller.abort();
+
+      const base: SessionState = {
+        ...stateRef.current,
+        phase: "opening",
+        config,
+        participants: [STUDENT_PARTICIPANT, MODERATOR, ...getParticipantsForPanel(config.participantCount)],
+        transcript: [],
+        elapsedSeconds: 0,
+        totalDurationSeconds: config.durationMinutes * 60,
+        engineMode: resolveInitialEngine(config.preferredEngine, stateRef.current.isAiConfigured),
+        interactionMode: "voice",
+      };
+      const controller = new AbortController();
+      const promise = generateTurn(MODERATOR, "open", base, controller.signal);
+      promise
+        .then((turn) => {
+          if (controller.signal.aborted) return;
+          sarvamSpeechProvider.prepare(turn.id, turn.text, {
+            voiceId: MODERATOR.voice?.sarvamVoice || "ratan",
+            languageCode: config.language === "hinglish" ? "hi-IN" : "en-IN",
+            pace: MODERATOR.voice?.pace ?? 1.0,
+            signal: controller.signal,
+          });
+        })
+        .catch(() => {});
+      openingPrefetchRef.current = { key, controller, promise };
+
+      // Don't keep a stale opening around if the candidate never enters
+      setTimeout(() => {
+        if (openingPrefetchRef.current?.controller === controller) {
+          controller.abort();
+          openingPrefetchRef.current = null;
+        }
+      }, 120_000);
+    },
+    [generateTurn],
+  );
+
   const startSession = useCallback(
     (config: RoomConfig) => {
       const genId = bumpGeneration();
       setIsRestoredSession(false);
+
+      // Use the opening drafted during the mic check, if it was for this exact room
+      const warmOpening = openingPrefetchRef.current;
+      openingPrefetchRef.current = null;
+      if (warmOpening && warmOpening.key === roomConfigKey(config) && (config.mode || "voice") === "voice") {
+        prefetchRef.current = {
+          genId,
+          afterTurnId: "",
+          speakerId: MODERATOR.id,
+          objective: "open",
+          controller: warmOpening.controller,
+          promise: warmOpening.promise,
+        };
+      } else {
+        warmOpening?.controller.abort();
+      }
 
       const participants = [
         STUDENT_PARTICIPANT,
@@ -2059,6 +2155,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       isReportStale,
       generateReport,
       voiceNotice,
+      prepareOpening,
     }),
     [
       state,
@@ -2085,6 +2182,7 @@ Deliver a concise, punchy 1-2 sentence response directly addressing recent remar
       isReportStale,
       generateReport,
       voiceNotice,
+      prepareOpening,
     ],
   );
 
